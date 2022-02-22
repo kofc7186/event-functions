@@ -19,7 +19,7 @@ defaults:
 jobs:
   build:
     runs-on: ubuntu-18.04
-    services:
+#    services:
 #      pubsub:
 #        image: knarz/pubsub-emulator
 #        ports:
