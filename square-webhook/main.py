@@ -74,7 +74,7 @@ def handle_webhook(request):
                      request.headers.get('Square-Retry-Number'),
                      request.headers.get('Square-Retry-Reason'))
 
-    LOGGER.debug("received webhook event",request=request_json)
+    LOGGER.debug("received webhook event", request=request_json)
 
     # put message on topic to upsert order
     publisher = pubsub_v1.PublisherClient()

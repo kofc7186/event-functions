@@ -1,25 +1,37 @@
-name: Unit Tests
+name: "order-mgr: Unit Tests"
 
 on:
   push:
     branches-ignore:
       - main
+    paths:
+      - 'order-mgr/**'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'order-mgr/**'
+
+defaults:
+  run:
+    shell: bash
+    working-directory: order-mgr
+
 jobs:
   build:
     runs-on: ubuntu-18.04
-    services:
+#    services:
 #      pubsub:
 #        image: knarz/pubsub-emulator
 #        ports:
 #          - 8085/tcp
     steps:
       - uses: actions/checkout@v2.4.0
+
       - name: Set up Python 3.9
-        uses: actions/setup-python@v2.3.1
+        uses: actions/setup-python@v2.3.2
         with:
           python-version: 3.9
+
       - name: Install dependencies
         run: |
           python -m pip install -q --upgrade pip
@@ -27,6 +39,7 @@ jobs:
           echo "GCP_PROJECT=square-webhook-123456" >> $GITHUB_ENV
 #          echo "PUBSUB_EMULATOR_HOST=127.0.0.1:${{ job.services.pubsub.ports['8085'] }}" >> $GITHUB_ENV
 #          echo "PUBSUB_PROJECT_ID=square-webhook-123456" >> $GITHUB_ENV
+#
       - name: Lint with flake8
         run: |
           pip install -q flake8 pytest pytest-cov
@@ -34,6 +47,7 @@ jobs:
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
           # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
 #      - name: Run unit tests
 #        run: |
 #          pytest -s -o log_cli=True test_unit.py

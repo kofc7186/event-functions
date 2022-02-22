@@ -1,4 +1,4 @@
-name: Deploy to GCP
+name: "square-webhook: Deploy to GCP"
 
 on:
   push:
@@ -6,11 +6,18 @@ on:
       - main
     paths:
       - 'square-webhook/**'
+
+defaults:
+  run:
+    shell: bash
+    working-directory: square-webhook
+
 jobs:
   deploy:
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2.4.0
+        working-directory: .
 
       - name: Set up gcloud SDK
         uses: actions-hub/gcloud@master
@@ -21,7 +28,6 @@ jobs:
           args: components update
 
       - name: Export environment variables to yaml file
-        working-directory: square-webhook/
         env:
           SQUARE_WEBHOOK_SIGNATURE_KEY: ${{ secrets.SQUARE_WEBHOOK_SIGNATURE_KEY }}
         run: |
@@ -37,11 +43,10 @@ jobs:
         with:
           args: pubsub topics create projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/orders
 
-      - name: Deploy function with an HTTP trigger
-        working-directory: square-webhook/
+      - name: Deploy function with an PubSub trigger
         uses: actions-hub/gcloud@master
         env:
           PROJECT_ID: ${{ secrets.GCLOUD_PROJECT_ID }}
           APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
         with:
-          args: functions deploy handle_webhook --env-vars-file .env.yaml --runtime python39 --trigger-http --allow-unauthenticated --memory=128MB
+          args: functions deploy square-webhook --entry-point handle_webhook --env-vars-file .env.yaml --runtime python39 --trigger-http --allow-unauthenticated --memory=128MB

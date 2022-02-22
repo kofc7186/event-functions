@@ -1,4 +1,4 @@
-""" This Cloud Function is triggered on a message being published to the 'square.order.created'
+""" This Cloud Function is triggered on a messaging being published to the 'square.order.created'
     topic.
 
     It reads the webhook and fetches order, payment, and customer information from Square and
@@ -35,7 +35,7 @@ if os.environ.get('FUNCTION_REGION', None):  # pragma: no cover
     LOGGER.addHandler(HANDLER)
 
 
-def handle_created(event, context):
+def handle_create(event, context):
     """ This reads the webhook message off of the pub/sub topic and then queries the Square API to get the detailed order,
     payment, and customer objects to persist in firestore.
 
@@ -192,13 +192,13 @@ def commit_to_firestore(doc: dict):
         order_counter_ref.set(1000)
     order_num_result = order_counter_ref.update({"order_counter": firestore.Increment(1)})
     doc.order_number = order_num_result.transform_results[0].integer_value
-    # TODO: set order_number back on square order metadata field?
+    #TODO: set order_number back on square order metadata field?
 
     order_ref = event_ref.collection(u'orders').document(doc.order.id)
     order_ref.set(doc)
 
 
-def handle_updated(event, context):
+def handle_update(event, context):
     """ Webhook fires with this
     {
   "merchant_id": "5S9MXCS9Y99KK",
