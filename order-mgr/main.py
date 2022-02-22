@@ -192,7 +192,7 @@ def commit_to_firestore(doc: dict):
         order_counter_ref.set(1000)
     order_num_result = order_counter_ref.update({"order_counter": firestore.Increment(1)})
     doc.order_number = order_num_result.transform_results[0].integer_value
-    #TODO: set order_number back on square order metadata field?
+    # TODO: set order_number back on square order metadata field?
 
     order_ref = event_ref.collection(u'orders').document(doc.order.id)
     order_ref.set(doc)
