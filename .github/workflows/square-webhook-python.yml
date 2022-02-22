@@ -1,4 +1,4 @@
-name: square-webhook: Unit Tests
+name: "square-webhook: Unit Tests"
 
 on:
   push:

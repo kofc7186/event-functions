@@ -1,4 +1,4 @@
-name: order-mgr: Unit Tests
+name: "order-mgr: Unit Tests"
 
 on:
   push:
