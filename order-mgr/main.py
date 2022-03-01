@@ -8,8 +8,8 @@
 # pylint: disable=redefined-outer-name,unused-argument,no-member
 
 import base64
+import contextvars
 import json
-import logging
 import os
 import re
 
@@ -17,87 +17,133 @@ from google.cloud import firestore
 
 from square.client import Client
 
-client = Client(
+firestore_client = firestore.Client()
+
+square_client = Client(
     access_token=os.environ['SQUARE_ACCESS_TOKEN'],
     square_version='2022-02-16',
     environment=os.environ['SQUARE_ENVIRONMENT'])
 
 SQUARE_LOCATION = os.environ['SQUARE_LOCATION']
 
-LOGGER = logging.getLogger(__name__)
-
-# only configure stackdriver logging when running on GCP
-if os.environ.get('FUNCTION_REGION', None):  # pragma: no cover
-    from google.cloud import logging as cloudlogging
-    LOG_CLIENT = cloudlogging.Client()
-    HANDLER = LOG_CLIENT.get_default_handler()
-    LOGGER = logging.getLogger("cloudLogger")
-    LOGGER.addHandler(HANDLER)
+ctx_id = contextvars.ContextVar("square_order_id", default="")
 
 
-def handle_created(event, context):
-    """ This reads the webhook message off of the pub/sub topic and then queries the Square API to get the detailed order,
-    payment, and customer objects to persist in firestore.
+def log(message, *args, **kwargs):
+    """ logs message using structured logging format """
+    structured_json = {
+        "message": message % args,
+    }
+    if ctx_id.get() != "":
+        structured_json["logging.googleapis.com/labels"] = {
+            "square_order_id": ctx_id.get()
+        }
 
-    If this method throws an Exception, and automatic-retry is enabled, then this will NACK the message to be retried.
-    If this method returns without raising an Exception, then the GCF framework will automatically ACK the message.
+    for key, value in kwargs.items():
+        structured_json[key] = value
+    print(json.dumps(structured_json))
+
+
+def handle_order_created(event, context):
+    """ This reads the webhook message off of the pub/sub topic and then queries the Square API
+    to get the detailed order, payment, and customer objects to persist in firestore.
+
+    If this method throws an Exception, and automatic-retry is enabled, then this will NACK the
+    message to be retried. If this method returns without raising an Exception, then the GCF
+    framework will automatically ACK the message.
     """
-    # TODO: add webhook message content in a structured way here
-    LOGGER.debug("""Received message '{}' from 'square.order.created' topic""".format(context.event_id))
-
-    if 'data' not in event:
-        raise KeyError(event)
-
+    log("Received pubsub message_id '%s' from 'square.order.created' topic", context.event_id)
     webhook_event = json.loads(base64.b64decode(event['data']).decode('utf-8'))
 
-    # webhook event should have structure like:
-    # {
-    #   "merchant_id": "5S9MXCS9Y99KK",
-    #   "type": "order.created",
-    #   "event_id": "116038d3-2948-439f-8679-fc86dbf80f69",
-    #   "created_at": "2020-04-16T23:14:26.129Z",
-    #   "data": {
-    #     "type": "order",
-    #     "id": "eA3vssLHKJrv9H0IdJCM3gNqfdcZY",
-    #     "object": {
-    #       "order_created": {
-    #         "created_at": "2020-04-16T23:14:26.129Z",
-    #         "location_id": "FPYCBCHYMXFK1",
-    #         "order_id": "eA3vssLHKJrv9H0IdJCM3gNqfdcZY",
-    #         "state": "OPEN",
-    #         "version": 1
-    #       }
-    #     }
-    #   }
-    # }
+    doc = build_doc_from_event(webhook_event)
 
-    order_id = webhook_event.data.id
+    commit_to_firestore(doc)
+
+
+def handle_order_updated(event, context):
+    """ Webhook fires denoting that there is an update to the Square order object """
+    log("Received pubsub message_id '%s' from 'square.order.updated' topic", context.event_id)
+    webhook_event = json.loads(base64.b64decode(event['data']).decode('utf-8'))
+    doc = build_doc_from_event(webhook_event)
+
+    update_in_firestore(doc)
+
+
+def handle_payment_updated(event, context):
+    """ Webhook fires denoting that there is an update to a Square payment object """
+    log("Received pubsub message_id '%s' from 'square.payment.updated' topic", context.event_id)
+    webhook_event = json.loads(base64.b64decode(event['data']).decode('utf-8'))
+
+    payment = webhook_event['data']['object']
+    order_id = payment['order_id']
+
+    doc = build_doc_from_event(None, order_id=order_id, payment=payment)
+    update_in_firestore(doc)
+
+
+def handle_customer_updated(event, context):
+    """ Webhook fires denoting that there is an update to a Square customer object """
+    log("Received pubsub message_id '%s' from 'square.customer.updated' topic", context.event_id)
+    webhook_event = json.loads(base64.b64decode(event['data']).decode('utf-8'))
+
+    customer_id = webhook_event['data']['id']
+
+    # search firestore to see if we have any orders referencing this customer ID
+    # there may be two cases; one where we knew the customer_id when it was inserted
+    event_ref = firestore_client.collection('events').document(os.environ['EVENT_DATE'])
+    customer_id_ref = event_ref.collection('orders').where("customer.id", "==", customer_id)
+    order_cust_ref = event_ref.collection('orders').where("order.customer_id", "==", customer_id)
+    results = customer_id_ref.get()
+    results.append(order_cust_ref.get())
+    if len(results) == 0:
+        log("received update for customer ID %s but no documents matched", customer_id)
+        return
+
+    # if yes, rebuild for each of those docs
+    for result in results:
+        doc = build_doc_from_event(None, order_id=result.get('order.id'), customer_id=customer_id)
+        update_in_firestore(doc)
+
+
+def build_doc_from_event(event, order_id=None, payment=None, customer_id=None):
+    """ build_doc_from_event builds the dict that represents the order to be written or updated
+        in firestore. """
+    if not event and not order_id:
+        raise Exception("either a webhook event or an order_id must be specified")
+
+    if event and not order_id:
+        order_id = event['data']['id']
+
+    ctx_id.set(order_id)
+    log("fetching information from Square")
+
     order = get_square_order(order_id)
-    customer_id = get_customer_id(order)
+    if not customer_id:
+        customer_id = get_customer_id(order)
     customer = {}
 
     # the square API is eventually consistent, so the first time we try to
     # extract the customer ID we may need to try again
     if customer_id is None:
-        LOGGER.debug("didn't find customer_id on first attempt, retrying")
+        log("customer_id couldn't be found, trying again...")
         order = get_square_order(order_id)
         customer_id = get_customer_id(order)
         if customer_id is None:
+            log("customer_id still couldn't be found, creating fake entry")
             customer = create_faux_customer(order)
 
     if not customer:
         customer = get_square_customer(customer_id)
 
-    payment_id = get_payment_id(order)
-    payment = get_square_payment(payment_id)
+    if not payment:
+        payment_id = get_payment_id(order)
+        payment = get_square_payment(payment_id)
 
-    doc = {
-        u'order': order,
-        u'customer': customer,
-        u'payment': payment
+    return {
+        'order': order,
+        'customer': customer,
+        'payment': payment
     }
-
-    commit_to_firestore(doc)
 
 
 def get_square_order(order_id: str):
@@ -105,26 +151,28 @@ def get_square_order(order_id: str):
 
     Raises exception if there was any error (transient or invalid order ID)
     """
-    orders_api = client.orders
+    log("fetching Square order information from Square API")
+    orders_api = square_client.orders
 
     body = {
-        u'location_id': SQUARE_LOCATION,
-        u'order_ids': [order_id]
+        'location_id': SQUARE_LOCATION,
+        'order_ids': [order_id]
     }
 
     result = orders_api.batch_retrieve_orders(body)
     if result.is_success():
-        return result.body.orders[0]
-    return Exception(result)
+        log("Square order API response", response=result.body)
+        return result.body['orders'][0]
+    raise Exception(result)
 
 
-def get_customer_id(order) -> str:
+def get_customer_id(order: dict) -> str:
     """ Extracts the customer ID value from a given order request
 
     Returns None if it can not be found in order
     """
-    if order.fulfillments[0].type == "DIGITAL" and order.customer_id is not None:
-        return order.customer_id
+    if order['fulfillments'][0]['type'] == "PICKUP" and order.get('customer_id') is not None:
+        return order['customer_id']
 
     return None
 
@@ -134,27 +182,29 @@ def get_square_customer(customer_id: str):
 
     Raises exception if there was any error (transient or invalid customer ID)
     """
-    customers_api = client.customers
+    customers_api = square_client.customers
 
     result = customers_api.retrieve_customer(customer_id)
     if result.is_success():
-        return result.body.customer
-    return Exception(result)
+        log("Square customer API response", response=result.body)
+        return result.body['customer']
+    raise Exception(result)
 
 
 def create_faux_customer(order):
     """ Creates faux customer object from information within order
     """
 
-    recipient = order.fulfillments[0].pickup_details.recipient
-    name_tokens = recipient.display_name.split(" ")
+    recipient = order['fulfillments'][0]['pickup_details']['recipient']
+    name_tokens = recipient['display_name'].split(" ")
 
-    phone_number = re.sub(r'\+1|\-|\(|\)', "", recipient.phone_number)
+    phone_number = re.sub(r'\+1|\-|\(|\)|\s', "", recipient['phone_number'])
 
     customer = {
-        u'given_name': " ".join(name_tokens[:-1]),
-        u'family_name': name_tokens[-1],
-        u'phone_number': phone_number
+        'given_name': " ".join(name_tokens[:-1]),
+        'family_name': name_tokens[-1],
+        'phone_number': phone_number,
+        'version': -1,
     }
 
     return customer
@@ -165,7 +215,7 @@ def get_payment_id(order) -> str:
 
     Returns None if it can not be found in order
     """
-    return order.tenders[0].id if len(order.tenders) == 1 else None
+    return order['tenders'][0]['id'] if len(order['tenders']) == 1 else None
 
 
 def get_square_payment(payment_id: str):
@@ -173,59 +223,57 @@ def get_square_payment(payment_id: str):
 
     Raises exception if there was any error (transient or invalid payment ID)
     """
-    payments_api = client.payments
+    payments_api = square_client.payments
 
     result = payments_api.get_payment(payment_id)
     if result.is_success():
-        return result.body.payment
-    return Exception(result)
+        log("Square payment API response", response=result.body)
+        return result.body['payment']
+    raise Exception(result)
 
 
 def commit_to_firestore(doc: dict):
-    """ Writes the combined order, payment, and customer information to firestore
-    """
+    """ Writes the combined order, payment, and customer information to firestore """
 
-    db = firestore.Client()
-    event_ref = db.collection(u'events').document(os.environ['EVENT_DATE'])
-    order_counter_ref = event_ref.get('order_counter')
+    event_ref = firestore_client.collection('events').document(os.environ['EVENT_DATE'])
+    order_ref = event_ref.collection('orders').document(doc['order']['id'])
+    if order_ref.get().exists:
+        raise Exception("document already exists in firestore")
+
+    order_counter_ref = event_ref.get(['order_counter'])
     if not order_counter_ref.exists:
-        order_counter_ref.set(1000)
-    order_num_result = order_counter_ref.update({"order_counter": firestore.Increment(1)})
-    doc.order_number = order_num_result.transform_results[0].integer_value
+        event_ref.set({"order_counter": 1000})
+    order_num_result = event_ref.update({"order_counter": firestore.Increment(1)})
+    doc['order_number'] = order_num_result.transform_results[0].integer_value
     # TODO: set order_number back on square order metadata field?
 
-    order_ref = event_ref.collection(u'orders').document(doc.order.id)
-    order_ref.set(doc)
+    set_result = order_ref.set(doc)
+    log("document committed to firestore: %s", set_result)
 
 
-def handle_updated(event, context):
-    """ Webhook fires with this
-    {
-  "merchant_id": "5S9MXCS9Y99KK",
-  "type": "order.updated",
-  "event_id": "4b8e5c91-9f17-4cf1-900a-4a0629f81add",
-  "created_at": "2020-04-16T23:14:26.359Z",
-  "data": {
-    "type": "order",
-    "id": "eA3vssLHKJrv9H0IdJCM3gNqfdcZY",
-    "object": {
-      "order_updated": {
-        "created_at": "2020-04-16T23:14:26.129Z",
-        "location_id": "FPYCBCHYMXFK1",
-        "order_id": "eA3vssLHKJrv9H0IdJCM3gNqfdcZY",
-        "state": "OPEN",
-        "updated_at": "2020-04-16T23:14:26.359Z",
-        "version": 2
-      }
-    }
-  }
-}
-    """
-    # fetch order id, customer id, payment id and subsequent objects
-    # can call doc_ref.update({
-    # u'order':order,
-    # u'payment': payment,
-    # u'customer': customer
-    # })
-    # this will keep the atomically incremented order count fixed
-    pass
+def update_in_firestore(doc: dict):
+    """ Updates the combined order, payment, and customer information to firestore """
+
+    event_ref = firestore_client.collection('events').document(os.environ['EVENT_DATE'])
+    order_ref = event_ref.collection('orders').document(doc['order']['id'])
+    order_doc = order_ref.get()
+    if order_doc.exists:
+        update_doc = {}
+
+        curr_order = order_doc.to_dict()
+        if curr_order['order']['version'] > doc['order']['version']:
+            update_doc['order'] = doc['order']
+        if curr_order['payment']['updated_at'] > doc['payment']['updated_at']:
+            update_doc['payment'] = doc['payment']
+        curr_customer_version = curr_order['customer'].get('version')
+        if not curr_customer_version or curr_customer_version > doc['customer']['version']:
+            update_doc['customer'] = doc['customer']
+        if len(update_doc.items()) > 0:
+            update_result = order_ref.update(update_doc)
+            log("updated firestore based on square update %s", update_result)
+        else:
+            log("skipped update since newer information is already persisted for record",
+                curr_order=curr_order)
+    else:
+        log("update failed because entry doesn't exist in firestore; adding entry")
+        commit_to_firestore(doc)

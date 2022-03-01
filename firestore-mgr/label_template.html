@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+  <body>
+    <div class="container">
+      <table class="table align-middle" style="width: 100%;">
+        <tbody>
+            <tr>
+                <td class="title">Name: {{order.customer_name}}</td>
+                <td class="title">Phone: {{order.phone_number}}</td>
+            </tr>
+            <tr>
+                <td class="title">Order #: {{order.square_order_number}}</td>
+                <td class="title">Total: {{"${:,.2f}".format(order.total)}}</td>
+            </tr>
+        </tbody>
+      </table>
+      <hr/>
+      <table class="table align-middle" style="border-left: blank; width: 100%;">
+        {% if order.note %}
+        <caption><u>Note: {{ order.note }}</u></caption>
+        {% endif %}
+        <thead>
+            <tr>
+              <th class="mealHeaderL">Two Piece Fish Meals</th>
+              <th class="mealHeaderMR">Three Piece Fish Meals</th>
+              <th class="mealHeaderMR">Macaroni and Cheese</th>
+            </tr>
+          </thead>
+        <tbody>
+            <tr>
+              <td class="mealValueL">{% if order.two_piece_meals > 0 %}{{order.two_piece_meals}}{% endif %}</td>
+              <td class="mealValueMR">{% if order.three_piece_meals > 0 %}{{order.three_piece_meals}}{% endif %}</td>
+              <td class="mealValueMR">{% if order.mac_and_cheese_meals > 0 %}{{order.mac_and_cheese_meals}}{% endif %}</td>
+            </tr>
+        </tbody>
+      </table>
+      <hr/>
+      {% if beers|length > 0 %}
+      <div class="title"><b><u>Beer Order:</u></b></div>
+      <br/>
+      <table class="table align-middle" style="width: auto;">
+        <thead class="table-light">
+            <tr>
+              <th style="font-size: 24px;">Quantity</th>
+              <th style="font-size: 24px;">Type</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for beer, quantity in beers.items() %}
+            <tr>
+              <td style="font-size: 24px; text-align:center;">{{quantity}}</td>
+              <td style="font-size: 24px;">{{beer}}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+  </body>
+</html>
