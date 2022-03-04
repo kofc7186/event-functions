@@ -136,7 +136,7 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
         return False
 
     def __update_phone_number(self, doc):
-        self.phone_number = doc['customer']['phone_number']
+        self.phone_number = doc['customer'].get('phone_number')
         return True
 
     def __update_meals(self, doc):
@@ -164,7 +164,10 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
         return False
 
     def __update_note(self, doc):
-        self.note = doc['order'].get('note')
+        note = doc['order'].get('note')
+        if not note:
+            note = doc['order']['fulfillments'][0]['pickup_details'].get('note')
+        self.note = note
         return True
 
     def __update_status(self, doc):
@@ -219,11 +222,14 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
 
 def extract_pickup_time(order) -> str:
     """ extracts the earliest pickup time from an order"""
-    min_pickup_time = "5:30PM-5:45PM"
+    min_pickup_time = ""
     for line_item in order['line_items']:
         if line_item['name'] == "Fried Fish" and line_item['variation_name']:
             if min_pickup_time == "" or line_item['variation_name'] < min_pickup_time:
                 min_pickup_time = line_item['variation_name']
+
+    if min_pickup_time == "":
+        min_pickup_time = "5:30PM-5:45PM"
 
     return min_pickup_time
 
