@@ -31,7 +31,7 @@ jobs:
         env:
           SQUARE_ACCESS_TOKEN: ${{ secrets.SQUARE_ACCESS_TOKEN }}
           SQUARE_ENVIRONMENT: production
-          EVENT_DATE: "2022-03-04"
+          EVENT_DATE: "2022-04-01"
           SQUARE_LOCATION: ${{ secrets.SQUARE_LOCATION }}
         run: |
           echo "SQUARE_ACCESS_TOKEN: ${SQUARE_ACCESS_TOKEN}" > .env.yaml

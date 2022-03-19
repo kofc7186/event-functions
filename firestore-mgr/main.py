@@ -127,16 +127,35 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
         return False
 
     def __update_customer_name(self, doc):
-        self.customer_name = \
-            f"{doc['customer'].get('given_name')} {doc['customer'].get('family_name')}".title()
+        given_name = doc['customer'].get('given_name')
+        family_name = doc['customer'].get('family_name')
+        if not given_name or not family_name:
+            display_name = \
+                doc['order']['fulfillments'][0]['pickup_details']['recipient'].get('display_name')
+            if display_name:
+                name_tokens = display_name.split(" ")
+                given_name = " ".join(name_tokens[:-1])
+                family_name = name_tokens[-1]
+        self.customer_name = f"{given_name} {family_name}".title()
         return True
 
     def __update_last_name(self, doc):
-        self.last_name = doc['customer'].get('family_name', "").title()
+        family_name = doc['customer'].get('family_name')
+        if not family_name:
+            display_name = \
+                doc['order']['fulfillments'][0]['pickup_details']['recipient'].get('display_name')
+            if display_name:
+                name_tokens = display_name.split(" ")
+                family_name = name_tokens[-1]
+        self.last_name = family_name.title()
         return False
 
     def __update_phone_number(self, doc):
-        self.phone_number = doc['customer'].get('phone_number')
+        phone_number = doc['customer'].get('phone_number')
+        if not phone_number:
+            phone_number = \
+                doc['order']['fulfillments'][0]['pickup_details']['recipient'].get('phone_number')
+        self.phone_number = phone_number.replace("+", "").replace("-", "")
         return True
 
     def __update_meals(self, doc):
@@ -192,6 +211,9 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
         re.compile(r"^order.line_items.*"): ['_Order__update_pickup_window',
                                              '_Order__update_meals',
                                              '_Order__update_beers'],
+        re.compile(r"^order.fulfillments$"): ['_Order__update_customer_name',
+                                              '_Order__update_last_name',
+                                              '_Order__update_note'],
         re.compile(r"^customer.given_name$"): ['_Order__update_customer_name'],
         re.compile(r"^customer.family_name$"): ['_Order__update_customer_name',
                                                 '_Order__update_last_name'],
