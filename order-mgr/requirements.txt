@@ -1,4 +1,4 @@
-squareup==17.2.0.20220216
+squareup==19.1.0.20220616
 google-cloud-logging==3.0.0
 google-cloud-firestore==2.3.4
 pytest-mock==3.7.0
