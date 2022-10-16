@@ -15,7 +15,7 @@ import os
 
 from hashlib import sha1
 from flask import Response
-from werkzeug.exceptions import BadRequest, Forbidden, UnsupportedMediaType, MethodNotAllowed, \
+from werkzeug.exceptions import BadRequest, UnsupportedMediaType, MethodNotAllowed, \
     InternalServerError
 
 from google.cloud import pubsub_v1
@@ -59,7 +59,7 @@ def validate_message(request):
     try:
         validate_square_signature(request)
     except ValueError as invalid_sig:
-        raise Forbidden(description="Signature could not be validated") from invalid_sig
+        raise BadRequest(description="Signature could not be validated") from invalid_sig
 
     return request_json
 
