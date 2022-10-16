@@ -36,7 +36,7 @@ jobs:
       - name: "Export environment variables to yaml file"
         env:
           SQUARE_ENVIRONMENT: production
-          EVENT_DATE: "2022-04-01"
+          EVENT_DATE: "2022-11-05"
         run: |
           echo "SQUARE_ACCESS_TOKEN: ${{ secrets.SQUARE_ACCESS_TOKEN }}" > .env.yaml
           echo "SQUARE_ENVIRONMENT: ${SQUARE_ENVIRONMENT}" >> .env.yaml
@@ -47,10 +47,10 @@ jobs:
         # if topic already exists this call will fail but that is OK
         continue-on-error: true
         run: |
-          gcloud pubsub topics create projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.created
+          gcloud pubsub topics create projects/serverless-fish-fry/topics/square.order.created
       - name: "Deploy order-mgr-created function with a PubSub trigger"
         run: |
-          gcloud functions deploy order-mgr-created --entry-point handle_created --env-vars-file .env.yaml --runtime python39 --trigger-topic=projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.created --memory=128MB
+          gcloud functions deploy order-mgr-created --entry-point handle_created --env-vars-file .env.yaml --runtime python39 --trigger-topic=projects/serverless-fish-fry/topics/square.order.created --memory=128MB
       - name: "Create square.order.updated topic for pubsub"
         # if topic already exists this call will fail but that is OK
         continue-on-error: true
@@ -58,4 +58,4 @@ jobs:
           gcloud pubsub topics create projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.updated
       - name: "Deploy order-mgr-updated function with a PubSub trigger"
         run: |
-          gcloud functions deploy order-mgr-updated --entry-point handle_updated --env-vars-file .env.yaml --runtime python39 --trigger-topic=projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.updated --memory=128MB
+          gcloud functions deploy order-mgr-updated --entry-point handle_updated --env-vars-file .env.yaml --runtime python39 --trigger-topic=projects/serverless-fish-fry/topics/square.order.updated --memory=128MB
