@@ -52,7 +52,7 @@ jobs:
 
       - name: "Deploy order-mgr-created function with a PubSub trigger"
         run: |
-          gcloud functions deploy order-mgr-created --region us-east1 --entry-point handle_order_created --env-vars-file .env.yaml --runtime python310 --trigger-topic square.order.created --memory=128MB
+          gcloud functions deploy order-mgr-order-created --region us-east1 --entry-point handle_order_created --env-vars-file .env.yaml --runtime python310 --trigger-topic square.order.created --memory=128MB
 
       - name: "Create square.order.updated topic for pubsub"
         # if topic already exists this call will fail but that is OK
@@ -62,7 +62,7 @@ jobs:
 
       - name: "Deploy order-mgr-updated function with a PubSub trigger"
         run: |
-          gcloud functions deploy order-mgr-updated --region us-east1 --entry-point handle_order_updated --env-vars-file .env.yaml --runtime python310 --trigger-topic square.order.updated --memory=128MB
+          gcloud functions deploy order-mgr-order-updated --region us-east1 --entry-point handle_order_updated --env-vars-file .env.yaml --runtime python310 --trigger-topic square.order.updated --memory=128MB
 
       - name: "Create square.payment.updated topic for pubsub"
         # if topic already exists this call will fail but that is OK
