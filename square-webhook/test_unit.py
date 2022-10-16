@@ -10,7 +10,7 @@ import flask
 import pytest
 
 from google.cloud import pubsub_v1
-from werkzeug.exceptions import BadRequest, UnsupportedMediaType, MethodNotAllowed,\
+from werkzeug.exceptions import BadRequest, Forbidden, UnsupportedMediaType, MethodNotAllowed,\
     InternalServerError
 
 import main
@@ -75,7 +75,7 @@ def test_handle_webhook_invalid_signature(app, mock_set_env_webhook_signature_ke
                                       "type": "order.created",
                                       "event_id": "uuid"},
                                   headers={"X-Square-Signature": "NOT_A_VALID_SIGNATURE"}):
-        with pytest.raises(BadRequest):
+        with pytest.raises(Forbidden):
             main.handle_webhook(flask.request)
 
 

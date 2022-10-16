@@ -6,7 +6,7 @@ gcloud pubsub topics create projects/serverless-fish-fry/topics/square.order.upd
 gcloud functions deploy square-webhook \
   --region us-east1 \
   --entry-point handle_webhook \
-  --runtime python39 \
+  --runtime python310 \
   --env-vars-file .env.yaml \
   --trigger-http \
   --allow-unauthenticated \
