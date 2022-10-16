@@ -39,10 +39,10 @@ jobs:
           SQUARE_ENVIRONMENT: production
           EVENT_DATE: "2022-11-05"
         run: |
-          echo 'SQUARE_ACCESS_TOKEN: "${{ secrets.SQUARE_ACCESS_TOKEN }}"' > .env.yaml
-          echo 'SQUARE_ENVIRONMENT: "${SQUARE_ENVIRONMENT}"' >> .env.yaml
-          echo 'SQUARE_LOCATION: "${{ secrets.SQUARE_LOCATION }}"' >> .env.yaml
-          echo 'EVENT_DATE: "${EVENT_DATE}"' >> .env.yaml
+          echo "SQUARE_ACCESS_TOKEN: \"${{ secrets.SQUARE_ACCESS_TOKEN }}\"" > .env.yaml
+          echo "SQUARE_ENVIRONMENT: \"${SQUARE_ENVIRONMENT}\"" >> .env.yaml
+          echo "SQUARE_LOCATION: \"${{ secrets.SQUARE_LOCATION }}\"" >> .env.yaml
+          echo "EVENT_DATE: \"${EVENT_DATE}\"" >> .env.yaml
 
       - name: "Create square.order.created topic for pubsub"
         # if topic already exists this call will fail but that is OK
