@@ -121,7 +121,10 @@ def test_good_message(app, mock_pubsub_calls, mock_set_env_webhook_signature_key
     path = "/test_handle_webhook_valid"
     content = {
         "merchant_id": "merchantID",
-        "data": "data",
+        "data": {
+            "id": "12345",
+            "type": "order"
+        },
         "type": "order.created",
         "event_id": "uuid"
     }
@@ -146,7 +149,10 @@ def test_good_message_retry(app, mock_pubsub_calls, mock_set_env_webhook_signatu
     path = "/test_handle_webhook_valid"
     content = {
         "merchant_id": "merchantID",
-        "data": "data",
+        "data": {
+            "id": "12345",
+            "type": "order"
+        },
         "type": "order.created",
         "event_id": "uuid"
     }
@@ -179,7 +185,10 @@ def test_good_message_publish_timeout(app, mock_pubsub_calls, mock_set_env_webho
     path = "/test_handle_webhook_valid"
     content = {
         "merchant_id": "merchantID",
-        "data": "data",
+        "data": {
+            "id": "12345",
+            "type": "order"
+        },
         "type": "order.created",
         "event_id": "uuid"
     }
@@ -208,7 +217,10 @@ def test_good_message_publish_unknown_error(app, mock_pubsub_calls,
     path = "/test_handle_webhook_valid"
     content = {
         "merchant_id": "merchantID",
-        "data": "data",
+        "data": {
+            "id": "12345",
+            "type": "order"
+        },
         "type": "order.created",
         "event_id": "uuid"
     }
