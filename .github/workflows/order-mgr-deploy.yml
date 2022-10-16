@@ -25,7 +25,7 @@ jobs:
       - name: Set up auth
         uses: google-github-actions/auth@c4799db9111fba4461e9f9da8732e5057b394f72 # v0.8.3
         with:
-          workload_identity_provider: projects/194415472833/locations/global/workloadIdentityPools/github-actions
+          workload_identity_provider: projects/194415472833/locations/global/workloadIdentityPools/github-actions/providers/github
           service_account: github-actions@serverless-fish-fry.iam.gserviceaccount.com
           create_credentials_file: 'true'
 
