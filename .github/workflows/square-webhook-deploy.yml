@@ -37,13 +37,13 @@ jobs:
         # if topic already exists this call will fail but that is OK
         continue-on-error: true
         run: |
-          gcloud pubsub topics create projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.created
+          gcloud pubsub topics create projects/serverless-fish-fry/topics/square.order.created
 
       - name: Create square.order.updated topic for pubsub
         # if topic already exists this call will fail but that is OK
         continue-on-error: true
         run: |
-          gcloud pubsub topics create projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.updated
+          gcloud pubsub topics create projects/serverless-fish-fry/topics/square.order.updated
      
       - name: "Deploy square-webhook function with a HTTP trigger"
         run: |
