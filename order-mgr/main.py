@@ -21,7 +21,7 @@ firestore_client = firestore.Client()
 
 square_client = Client(
     access_token=os.environ['SQUARE_ACCESS_TOKEN'],
-    square_version='2022-02-16',
+    square_version='2022-09-21',
     environment=os.environ['SQUARE_ENVIRONMENT'])
 
 SQUARE_LOCATION = os.environ['SQUARE_LOCATION']
