@@ -8,16 +8,16 @@ gcloud functions deploy firestore-mgr-created \
   --region us-east1 \
   --entry-point handle_created \
   --env-vars-file .env.yaml \
-  --runtime python39 \
+  --runtime python310 \
   --memory=256MB \
   --trigger-event "providers/cloud.firestore/eventTypes/document.create" \
-  --trigger-resource "projects/serverless-fish-fry/databases/(default)/documents/events/2022-04-01/orders/{order}"
+  --trigger-resource "projects/serverless-fish-fry/databases/(default)/documents/events/2022-11-05/orders/{order}"
 
 gcloud functions deploy firestore-mgr-updated \
   --region us-east1 \
   --entry-point handle_updated \
   --env-vars-file .env.yaml \
-  --runtime python39 \
+  --runtime python310 \
   --memory=256MB \
   --trigger-event "providers/cloud.firestore/eventTypes/document.update" \
-  --trigger-resource "projects/serverless-fish-fry/databases/(default)/documents/events/2022-04-01/orders/{order}"
+  --trigger-resource "projects/serverless-fish-fry/databases/(default)/documents/events/2022-11-05/orders/{order}"
