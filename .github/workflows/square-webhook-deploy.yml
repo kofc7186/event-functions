@@ -14,49 +14,38 @@ defaults:
 
 jobs:
   deploy:
-   runs-on: ubuntu-18.04
+   runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2.4.0
+      - uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3.1.0
         working-directory: .
 
-      - name: Set up gcloud SDK
-        uses: actions-hub/gcloud@master
-        env:
-          PROJECT_ID: ${{ secrets.GCLOUD_PROJECT_ID }}
-          APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+      - name: Set up auth
+        uses: google-github-actions/auth@c4799db9111fba4461e9f9da8732e5057b394f72 # v0.8.3
         with:
-          args: components update
+          credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
 
-      - name: Export environment variables to yaml file
-        env:
-          SQUARE_WEBHOOK_SIGNATURE_KEY: ${{ secrets.SQUARE_WEBHOOK_SIGNATURE_KEY }}
-        run: |
-          echo "SQUARE_WEBHOOK_SIGNATURE_KEY: ${SQUARE_WEBHOOK_SIGNATURE_KEY}" > .env.yaml
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@ee9693ff89cdf73862b8a13988f6a71070e8fc58 # v0.6.2
+        with:
+          project_id: ${{ secrets.GCLOUD_PROJECT_ID }}
 
       - name: Create square.order.created topic for pubsub
         # if topic already exists this call will fail but that is OK
         continue-on-error: true
-        uses: actions-hub/gcloud@master
-        env:
-          PROJECT_ID: ${{ secrets.GCLOUD_PROJECT_ID }}
-          APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-        with:
-          args: pubsub topics create projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.created
+        run: |
+          gcloud pubsub topics create projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.created
 
       - name: Create square.order.updated topic for pubsub
         # if topic already exists this call will fail but that is OK
         continue-on-error: true
-        uses: actions-hub/gcloud@master
-        env:
-          PROJECT_ID: ${{ secrets.GCLOUD_PROJECT_ID }}
-          APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-        with:
-          args: pubsub topics create projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.updated
+        run: |
+          gcloud pubsub topics create projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.updated
 
       - name: "Deploy square-webhook function with a HTTP trigger"
         uses: actions-hub/gcloud@master
         env:
           PROJECT_ID: ${{ secrets.GCLOUD_PROJECT_ID }}
           APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-        with:
-          args: functions deploy square-webhook --entry-point handle_webhook --env-vars-file .env.yaml --runtime python39 --trigger-http --allow-unauthenticated --memory=128MB
+        run: |
+          echo "SQUARE_WEBHOOK_SIGNATURE_KEY: ${{ secrets.SQUARE_WEBHOOK_SIGNATURE_KEY }}" > .env.yaml
+          gcloud functions deploy square-webhook --entry-point handle_webhook --env-vars-file .env.yaml --runtime python39 --trigger-http --allow-unauthenticated --memory=128MB
