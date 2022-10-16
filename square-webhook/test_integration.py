@@ -66,7 +66,10 @@ def test_handle_webhook_publish_timeout(app, mocker, mock_setup):
     path = "/test_handle_webhook_valid"
     content = {
         "merchant_id": "merchantID",
-        "data": "data",
+        "data": {
+            "id": "12345",
+            "type": "order"
+        },
         "type": "order.created",
         "event_id": "uuid"
     }
@@ -92,7 +95,10 @@ def test_handle_webhook_without_topic(app, mocker, mock_setup):
     path = "/test_handle_webhook_valid"
     content = {
         "merchant_id": "merchantID",
-        "data": "data",
+        "data": {
+            "id": "12345",
+            "type": "order"
+        },
         "type": "bogus.event",
         "event_id": "uuid"
     }
@@ -114,7 +120,10 @@ def test_handle_webhook_valid(app, mock_setup):
     path = "/test_handle_webhook_valid"
     content = {
         "merchant_id": "merchantID",
-        "data": "data",
+        "data": {
+            "id": "12345",
+            "type": "order"
+        },
         "type": "order.created",
         "event_id": "uuid"
     }
