@@ -10,6 +10,7 @@ on:
     branches: [ main ]
     paths:
       - 'order-mgr/**'
+  workflow_dispatch:
 
 defaults:
   run:
