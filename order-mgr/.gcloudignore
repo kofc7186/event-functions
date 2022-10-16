@@ -8,3 +8,4 @@ __pycache__/
 test_integration.py
 test_unit.py
 LICENSE
+setup.sh

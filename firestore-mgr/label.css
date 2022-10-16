@@ -1,0 +1,31 @@
+body {
+    font-family: sans-serif;
+}
+@media print {
+    .title {
+        font-size: 24px;
+    }
+    .mealHeaderL {
+        text-align: center;
+        font-size: 24px;
+        font-style: italic;
+    }
+    .mealHeaderMR {
+        border-left: 1px solid;
+        text-align: center;
+        font-size: 24px;
+        font-style: italic;
+    }
+    .mealValueL {
+        text-align: center;
+        font-size: 192px;
+        font-weight: bold;
+    }
+    .mealValueMR {
+        border-left: 1px solid;
+        text-align: center;
+        font-size: 192px;
+        font-weight: bold;
+    }
+
+}

@@ -1,12 +1,3 @@
-""" This Cloud Function is triggered on a message being published to the 'square.order.created'
-    topic.
-
-    It reads the webhook and fetches order, payment, and customer information from Square and
-    writes it to a firestore document. Assuming the write to firestore succeeds, we ACK the
-    message on the topic.
-"""
-# pylint: disable=redefined-outer-name,unused-argument,no-member
-
 import base64
 import contextvars
 import json
@@ -17,8 +8,6 @@ from google.cloud import firestore
 
 from square.client import Client
 
-firestore_client = firestore.Client()
-
 square_client = Client(
     access_token=os.environ['SQUARE_ACCESS_TOKEN'],
     square_version='2022-02-16',
@@ -28,6 +17,35 @@ SQUARE_LOCATION = os.environ['SQUARE_LOCATION']
 
 ctx_id = contextvars.ContextVar("square_order_id", default="")
 
+
+def get_times():
+#    orders = ["3nRYmSNprNrhInXTRnTt6wKy9V6YY", "nTZVf7WZE77sJ910yX6iWrVZtXUZY", "xm22QMKNsw4io3phCwxEu2iEswBZY", "fVMjmfX7S9sSBns2D374o6Ye8kRZY", "jtp6DSzxpZnbFkqdkIQbh9frL8cZY", "RSahsSNRw0DZ9lefUNNvkB1G1i9YY", "XzHcSQXBdN7I0KHwKQpCrwcJItUZY", "L3M2VDjPS1nQtSgitXlNwbvFmcLZY", "znQfcfpww9rR7mtWY9gcCpAbPzfZY", "HZI5mMbOGHb22NChbdytRQG9JWAZY", "7nqH7CERtLdITtXInAhZm9r9XmEZY", "xo7gI81O64btezOXTK0gMyFMnhGZY", "h2wfjtoR8k3vutt530jv5VJhQgOZY", "ZIFGgLUxUA8g5VdevTo0KoonwkbZY", "39s67Gn5oAjLNxIzyxKp8uvvYnAZY", "jbSFc08qjurchjC8UmQsTtBzhJQZY", "xa4ewvcXdTaYrrtBRtmkeB9QU2eZY", "j7SZMt6hCVMKm89sO4YKIZOcdSLZY", "TfQ5cakHtnkqfGkobAA2nbFEkqdZY", "D1f9imZGM4pKZgjkoZ3klcp8uoUZY", "tEmmsYjuMZTVy4UtzvAtalNfWzEZY", "XpysC6VZtJboeutDnWYOsLTVAgFZY", "hmaOACwUTJgFD5LcybkcBSSyMQaZY", "TbgSeJjuVSiqWBXLRpBqZrtKBmYZY", "xGE58NgIBhdXcXWvagxU3znBpUUZY", "7nSDFBqdbIcxEvNctKQEg5x4KxPZY", "nTh5pC126eDy39b0nF4OsK0XQUVZY", "HXDD0EdnkDdt8eoLE2m7LMRvJq8YY", "piMD7FCyU0BKpeMTszKJHUihAQNZY", "fl4fJ2nFbzkDORXO5y9viO5U5oTZY", "5qQTGvshsQHWAdF24mIs9xbkoFZZY", "9uDe3Zb5wm8cSRyevtNxcSz2YbPZY", "TLC7mkvtvrOB4xEjEvHunxzUau6YY", "pWWfbkqvk8LKqQcr6rpHs0m8If7YY", "dShovn9IUMu4aLY2kJzgRspyTfeZY", "zpzUQwdjA8c4U0ij8sxkpEVSPaLZY", "z7EWpFPXeKsugjLZ3FYVUHTfMsdZY", "jV5U7tUZpQkvenvrW17CV1pEpUQZY", "lgMbZcv460Ih3KxOCyK1HDCZjGgZY", "RWWmGVXmbqw2Ic1m3YIJuQcZspYZY", "ZeOFWKy0zzF7NmmahycrR9pRBkcZY", "zTssZdAuNQSzNGOoWfZjhpbixjZZY", "PjdqsfWqAwwNYn4JVyryh2NgfJZZY", "TLqfcpW1HAdqWOcTnTMNdDGicX9YY", "TRhlwWrTdkdnE8CFLL57Fr1PQRbZY", "NEwltDCtUM0AJK3KVWAUC8PcedDZY", "10C5WJptWjIgzkA8SLu4cY6eZrNZY", "piEHzdbBNcHcbSGPXp1itYRxH2eZY", "p60Z3zbgr6QHUZtJCQGpkMsfKhIZY", "PZUUu1W3CpNk58rRacjfYzjLG1WZY", "3FQEUeoQbQ3MWGcMQs7NPJIu7YJZY", "Rgp3vReIdesBzxO3CukzXngVuKBZY", "p4HrnzGQeNE9vOPbcRdHEpYVxyMZY", "9Or2LAT6kHt3rmlGOd1589KYbeJZY", "tCZK7RVLrz1IkakCKBpdkIxSG9TZY", "V2Vg3B9yBBA678FsRiHwI6ASeaaZY", "HVUWNUS74gBgKYupIXAokz6qhUFZY", "bL6QMhf74CdULd0vhjdHIB3t8XWZY", "tGR3qMj0cGIHlcVVGDiILMDckTFZY", "V6BZl39cMSpZJIiGDIAKoIsVXAVZY", "bhNQWnvMFzHB3H4kGjWYRJ38WJLZY", "tyDxQyARPUcYE2U37Gj8INhWJGAZY", "LpH5G16BGH7eFo4Js3vrEme9M0TZY", "ps59Wt8dY4PsdSjtUDPMiwyZDQRZY", "N6P3bqyrw58LnoAF5IJ7gxgFm7WZY"]
+#    orders = ["LPyv12qy67lrpXCIRSQjexp8wZRZY", "v9sHIVHintzFKgcVIv7RiDqHReSZY", "jZvsuZLcLbN8BpKwOgHUFydHEtXZY", "x89GLhWhq4WFNbgye4d6fQ42m4FZY", "Tv2yxEb4OhWZ0If1xDcYVlYQHbNZY", "Z47vZbNnlj97eJyo5Mi84dY3MIdZY", "3JEhoxDBz0YsJMTTjXMxdRyeBaHZY", "TbIeG1k9qzmiWI6Fjf2Xd5AY37HZY", "RkxUOyaiCbfHX8cSqIjrpnDTCmSZY", "jjg2gz0sEMsN0HURyxDjYLXzOCSZY", "d6Rcmhd44fZiU05XNHfy2y6XwFHZY", "FsyHpEvc8Z9Dksst1EjZXJ5K6PTZY", "BIncYTnrITzemLyPTrE6lO7RcYGZY", "Djm7LtbSJq4EJy7v8LiP4Q5MIB9YY", "3jnM2WERRMNBIChHucirT3dMtEFZY", "D1xYtH1s7smWeEArPKOQyUPDYBaZY", "ZioDRFHQ6VhV9sCbsMOrBznKDTMZY", "1AcNlSP0DgluS2U0XszL268PUhBZY", "RWmiUxoqZrcKw64hP9U76zAT4dAZY", "Z4rXRPHbZ0NLfcOlZzAbSzYaF69YY", "N2DcMcM7GnJI05CVbmDbpnHCbm7YY", "fFieOuCl20xqb1MDswwhDKRX0wYZY", "Tl5eloTaLTGXn15eBuZwuaKkfyVZY", "jVNAot3WWzqpKcaQOyVomt6JqbSZY", "1gmODETfL4s1rLAcEd7el9a0Vl6YY", "lG5ApWnMXSxLnW4yevtwRUYDXAXZY", "dWfaZnDrGF8QnVom011MRCKkppdZY", "VkOtZb1unuY1nLzLrDBa5TPUIPKZY", "ZshtncX96aKeNp4OMId9Qc73A6WZY", "TVtwnkTCroEezefsoe2LDFkXEuMZY", "37hTiYyGPbfTCMqWPLwXNd6EFtVZY", "DtjhMPr2FpFePhE776xPR7ojNB8YY", "BIPgOM4lzU9YQRHzIjSIQzrbvNeZY", "nHv1gBzhfDsEvaDnC6M9vr7CYX6YY", "3JU3JkYUigoRYlWmroMuZZxByCYZY", "HxwpFrN94rYwgwyiV6BiZHLBltAZY", "Za4LkNWcEQhD1RChbBzjTKnvxBAZY", "J4Pr54EMYdSBfzYmK6eKkWe3RaFZY", "5wVwo7peMgSMWb0dsrH9jwo9WVAZY", "h8Fmy1qzUGG4lBFGfb31SjDiUGLZY", "HB4bwMVcamVtUPQMP2MJc35FHKRZY", "lKv6rFgrdhI64fbYyy63mu1r4ZRZY", "v315OXAZGDtfwxLSPIRPfpVi4WSZY", "tQiHNX7E6UpKfjPkYomH2PsKljEZY", "rvICHCxeNK7IqvNrk0Drf85qXjPZY", "TTkKcNOlWJPRT8Wb0aHUGjLDq2SZY", "nbxpOO1LvjrrWZKZASRfKRIkthFZY", "fPLKFxrZLxSYDhjVpgkBOf3hLkBZY", "5CKy0ShlCGh9l8lDP3exJzb4srRZY", "TNt8KLJLfoxrHvEpC0V5tFnBwgRZY", "TxJXth0iSoppr2LgK1bLaD8y2uCZY", "nVSVlXHU9h7FhC045q4Gdjyqg4RZY", "hGioX64KaE6rY4YQNIqPu2B4ggCZY", "hYbAxLo83qPQzJeqOMCOMWWLCQIZY", "hU56edFX3qoNe3E5TPWrAj4U2wFZY", "NubU5iviA5Ir5jPdbQJ6s91lYmPZY", "LF3G4lLDb0ums1aN4EUQVEljEbQZY", "PFwbIJuWEF51cfkUAqavc4MOWeaZY", "LtVLKMuLQKRsNKrotojepkrKJyRZY", "Bw7ylMnvtd2OCkDElkx4bfLiCccZY", "he4ZHh9m9Io00feRKdXOf2IAT18YY", "H16fw4h4kY8UQOan651S8iJekDgZY", "Lx92gNAFSqDa0j5MYQjzT5hUWgcZY", "9kKkjzTf9uhBHtJwYpruvtp0IbTZY", "dyLd3VthX1WDTnB5vsq7Otq1KsbZY"]
+    orders = ["fdExeEeTQeznCSSmzUptN1BDhV7YY", "diN84xqVxgjgxhsud07lpgySHJXZY", "FIOEmTQoK7zqsvACE0Z5bZH0cgRZY", "N0MLbb9aemzb9wnzXs6Bku5fWMaZY", "jFd2XClzaY9Fcit8DTFM8vN15dJZY", "ZGC1CePsbt3q6D2kYy3V8ITM6u7YY", "nhSMIOJwJcU0GlH2qXrfyJ3t6SSZY", "BeMj1vFWpEaHFwAm8q2vL0Ahn2JZY", "vRWdz93SBzU8MuiREPDUjMxaSADZY", "JOY6Bqlijz7h3wMsh2KVpfaC13NZY", "hwr44NS0Clv0h3RbM4hMHaJPgY6YY", "LTclA172cCXUqqjtjoNZjnigdADZY", "P3TKNfxnCYek8qD1ENun6o5IFuVZY", "hmOCVk36HhSZ4e76ItVYUZOAK9aZY", "jxvIdSCzQCXDEUGuQBWxrw3fub7YY", "NyZOBHrsD6CQmuS5Q2sgBzo9iubZY", "rBd28h5w8Vr88PVFuNA4OMeFVxOZY", "XPTXk8CLH76tCHqh9dktc1FgEJbZY", "5IZCXhvH91GIkusEoZJHwHSkD85YY", "fRStnuBGueWib9o8DPH0nPyVbwNZY", "jB7GrGQaz8cAURhqXsFi2wCM1kHZY", "rJhWuMErAiAgaUkem6CLcHwbR5PZY", "NqXpA6Ophz5SomgYar0S5e004wCZY", "Nw67bjKryx9R1MfPOCkNrccguqTZY", "9YQCxmWMknzGdcWvpyYnzSWrZUDZY", "XDVPy6yiaVVKodMPlM2OBX5QJneZY", "tG5dPKTSjfBrRUA8OPTpyH3swuRZY", "DxBxrUwdQXeaBUp6A7EFrDckPgKZY", "XjFnKg6HhQDEJgB1v4u1VnoOtQCZY", "D9L9YcAgnrXVoXQ0skp2gVQGFBAZY", "xGm0Np5X7EYx6Vb0oJ4GBYZLhQVZY", "jL00lkbxYFWdR7neun9eFaawNXcZY", "nvXBFF6I6KOe7499BOPPHExtJmQZY", "zvo7P64KczK5RcSRIRD1NW6XfJfZY", "JAv743O2w9d0gKodOsV17s0LiYGZY", "pAnZ5uDhUxe2eD5yCCl7epZgNr8YY", "5g1SRMbZfHWFBbDMYsEN6aKoNkbZY", "hui06AnBNpMkkQmXQyNPnyXUwXWZY", "bfiz0eUq1rGy4daVEWzen2RJV8XZY", "BsBEwGrXPrLDeYzgbLBH2VIojXIZY", "z1pMaBpEaQJNe0FIqhfIBXmxHnRZY", "Ddxoix0J2EcHzn15gu9u9uRT0C6YY", "tw8YtUvEW2ID6Q8HnG6Blw6AvTBZY", "TZbenWt1jO8EdwBYmdJyDR7WVuTZY", "zzWz8WLg0DJk98IkS1jm8LzhxzcZY", "pcJjluY7LhqImg4UMVnv5VhOxQaZY", "X7tTDPrJhcefKS1jHdV3N9XScVbZY", "fLT5iFlQKDqgdaOFie7aiw2kZDGZY", "lIWEA43yK2a6MrKzCuHFIicdGRUZY", "Dl1S3Ra4oFbAeDDN7xmSOsOsTYaZY", "Xbd3l3P9EfDP1eQoeAtOU5Zpd37YY", "XfVGP1UoW3aigFxJpyrXLyWpatTZY", "Hla3uunDgcT94O4kwLROaihBdicZY", "frFycUPgfiFcUifPF3p2kV2bQSTZY", "9oq9Y3bo7FhhM1ML90BaPECookFZY", "7tdxONjadwWZ5hZbRFhdZ0DC3VSZY", "tSNmijLw3Cln2dYNyHK7YC78ATXZY", "btRRnH9JrIDHwFLvjEWE7xNiHDFZY", "738ess9QCXEpUDZMhaOF3WopmSbZY", "d86aPvVCAhgvwnkwf8fAy6lKEtTZY"]
+
+    orders_api = square_client.orders
+
+    body = {
+        'location_id': SQUARE_LOCATION,
+        'order_ids': orders
+    }
+
+    result = orders_api.batch_retrieve_orders(body)
+    if result.is_success():
+        for order in result.body['orders']:
+            note = order['fulfillments'][0]['pickup_details'].get('note').replace("\n","")
+            if note != "":
+                #print(note)
+                print(f"update orders set note = '{note}' where id = '{order['id']}';")
+            #else:
+            #    print("no note")
+    else:
+        print("failed: %s", result)
+    print(len(orders))
+
+
+if __name__ == '__main__':
+    get_times()
 
 def log(message, *args, **kwargs):
     """ logs message using structured logging format """

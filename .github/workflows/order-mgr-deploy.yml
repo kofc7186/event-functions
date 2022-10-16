@@ -14,7 +14,7 @@ defaults:
 
 jobs:
   deploy:
-    runs-on: ubuntu-18.04
+   runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v3.0.2
         working-directory: .
@@ -31,11 +31,13 @@ jobs:
         env:
           SQUARE_ACCESS_TOKEN: ${{ secrets.SQUARE_ACCESS_TOKEN }}
           SQUARE_ENVIRONMENT: production
+          EVENT_DATE: "2022-04-01"
           SQUARE_LOCATION: ${{ secrets.SQUARE_LOCATION }}
         run: |
           echo "SQUARE_ACCESS_TOKEN: ${SQUARE_ACCESS_TOKEN}" > .env.yaml
           echo "SQUARE_ENVIRONMENT: ${SQUARE_ENVIRONMENT}" >> .env.yaml
           echo "SQUARE_LOCATION: ${SQUARE_LOCATION}" >> .env.yaml
+          echo "EVENT_DATE: ${EVENT_DATE}" >> .env.yaml
 
       - name: "Create square.order.created topic for pubsub"
         # if topic already exists this call will fail but that is OK
@@ -47,13 +49,13 @@ jobs:
         with:
           args: pubsub topics create projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.created
 
-      - name: "Deploy order-mgr:created function with a PubSub trigger"
+      - name: "Deploy order-mgr-created function with a PubSub trigger"
         uses: actions-hub/gcloud@master
         env:
           PROJECT_ID: ${{ secrets.GCLOUD_PROJECT_ID }}
           APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
         with:
-          args: functions deploy order-mgr:created --entry-point handle_created --env-vars-file .env.yaml --runtime python39 --trigger-topic=projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.created --memory=128MB
+          args: functions deploy order-mgr-created --entry-point handle_created --env-vars-file .env.yaml --runtime python39 --trigger-topic=projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.created --memory=128MB
 
       - name: "Create square.order.updated topic for pubsub"
         # if topic already exists this call will fail but that is OK
@@ -65,10 +67,10 @@ jobs:
         with:
           args: pubsub topics create projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.updated
 
-      - name: "Deploy order-mgr:updated function with a PubSub trigger"
+      - name: "Deploy order-mgr-updated function with a PubSub trigger"
         uses: actions-hub/gcloud@master
         env:
           PROJECT_ID: ${{ secrets.GCLOUD_PROJECT_ID }}
           APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
         with:
-          args: functions deploy order-mgr:updated --entry-point handle_updated --env-vars-file .env.yaml --runtime python39 --trigger-topic=projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.updated --memory=128MB
+          args: functions deploy order-mgr-updated --entry-point handle_updated --env-vars-file .env.yaml --runtime python39 --trigger-topic=projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.updated --memory=128MB

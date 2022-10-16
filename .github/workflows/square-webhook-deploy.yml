@@ -14,7 +14,7 @@ defaults:
 
 jobs:
   deploy:
-    runs-on: ubuntu-18.04
+   runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v3.0.2
         working-directory: .
@@ -33,7 +33,7 @@ jobs:
         run: |
           echo "SQUARE_WEBHOOK_SIGNATURE_KEY: ${SQUARE_WEBHOOK_SIGNATURE_KEY}" > .env.yaml
 
-      - name: Create topic for pubsub
+      - name: Create square.order.created topic for pubsub
         # if topic already exists this call will fail but that is OK
         continue-on-error: true
         uses: actions-hub/gcloud@master
@@ -41,9 +41,19 @@ jobs:
           PROJECT_ID: ${{ secrets.GCLOUD_PROJECT_ID }}
           APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
         with:
-          args: pubsub topics create projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/orders
+          args: pubsub topics create projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.created
 
-      - name: Deploy function with an PubSub trigger
+      - name: Create square.order.updated topic for pubsub
+        # if topic already exists this call will fail but that is OK
+        continue-on-error: true
+        uses: actions-hub/gcloud@master
+        env:
+          PROJECT_ID: ${{ secrets.GCLOUD_PROJECT_ID }}
+          APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+        with:
+          args: pubsub topics create projects/${{ secrets.GCLOUD_PROJECT_ID }}/topics/square.order.updated
+
+      - name: "Deploy square-webhook function with a HTTP trigger"
         uses: actions-hub/gcloud@master
         env:
           PROJECT_ID: ${{ secrets.GCLOUD_PROJECT_ID }}

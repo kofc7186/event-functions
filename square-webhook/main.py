@@ -8,9 +8,9 @@
 # pylint: disable=redefined-outer-name,unused-argument,no-member
 
 import base64
+import contextvars
 import hmac
 import json
-import logging
 import os
 
 from hashlib import sha1
@@ -20,15 +20,23 @@ from werkzeug.exceptions import BadRequest, UnsupportedMediaType, MethodNotAllow
 
 from google.cloud import pubsub_v1
 
-LOGGER = logging.getLogger(__name__)
 
-# only configure stackdriver logging when running on GCP
-if os.environ.get('FUNCTION_REGION', None):  # pragma: no cover
-    from google.cloud import logging as cloudlogging
-    LOG_CLIENT = cloudlogging.Client()
-    HANDLER = LOG_CLIENT.get_default_handler()
-    LOGGER = logging.getLogger("cloudLogger")
-    LOGGER.addHandler(HANDLER)
+ctx_id = contextvars.ContextVar("square_order_id", default="")
+
+
+def log(message, *args, **kwargs):
+    """ logs message using structured logging format """
+    structured_json = {
+        "message": message % args,
+    }
+    if ctx_id.get() != "":
+        structured_json["logging.googleapis.com/labels"] = {
+            "square_order_id": ctx_id.get(),
+        }
+
+    for key, value in kwargs.items():
+        structured_json[key] = value
+    print(json.dumps(structured_json))
 
 
 def validate_message(request):
@@ -38,7 +46,7 @@ def validate_message(request):
 
     content_type = request.headers['content-type']
     if content_type != 'application/json':
-        raise UnsupportedMediaType(description="Unknown content type: {}".format(content_type))
+        raise UnsupportedMediaType(description=f"Unknown content type: {content_type}")
 
     # parse the content as JSON
     request_json = request.get_json(silent=False)
@@ -51,8 +59,8 @@ def validate_message(request):
     # ensure the request is signed as coming from Square
     try:
         validate_square_signature(request)
-    except ValueError:
-        raise BadRequest(description="Signature could not be validated")
+    except ValueError as invalid_sig:
+        raise BadRequest(description="Signature could not be validated") from invalid_sig
 
     return request_json
 
@@ -64,21 +72,23 @@ def handle_webhook(request):
     """
     request_json = validate_message(request)
 
+    ctx_id.set(request_json['data']['id'])
+
     if 'Square-Initial-Delivery-Timestamp' in request.headers:
-        LOGGER.debug("Delivery time of initial notification: %s",
-                     request.headers.get('Square-Initial-Delivery-Timestamp'))
+        log("Delivery time of initial notification: %s",
+            request.headers.get('Square-Initial-Delivery-Timestamp'))
 
     if 'Square-Retry-Number' in request.headers:
-        LOGGER.debug("Square has resent this notification %s times; "
-                     "reason given for the last failure is '%s'",
-                     request.headers.get('Square-Retry-Number'),
-                     request.headers.get('Square-Retry-Reason'))
+        log("Square has resent this notification %s times; "
+            "reason given for the last failure is '%s'",
+            request.headers.get('Square-Retry-Number'),
+            request.headers.get('Square-Retry-Reason'))
 
-    LOGGER.debug("received webhook event", request=request_json)
+    log(f"{request_json['type']} webhook received", webhook=request_json)
 
     # put message on topic to upsert order
     publisher = pubsub_v1.PublisherClient()
-    topic_path = publisher.topic_path(os.environ["GCP_PROJECT"], "square.{}".format(request_json['type']))
+    topic_path = publisher.topic_path(os.environ["GCP_PROJECT"], f"square.{request_json['type']}")
     future = publisher.publish(topic_path, data=json.dumps(request_json).encode('utf-8'))
 
     # this will block until the publish is complete;
@@ -87,10 +97,10 @@ def handle_webhook(request):
     try:
         message_id = future.result(timeout=2)
         return Response(message_id, status=200)
-    except pubsub_v1.publisher.exceptions.TimeoutError:
-        raise InternalServerError(description="Timeout publishing notification")
-    except Exception:
-        raise InternalServerError(description="Unknown error")
+    except pubsub_v1.publisher.exceptions.TimeoutError as timeout:
+        raise InternalServerError(description="Timeout publishing notification") from timeout
+    except Exception as generic_ex:
+        raise InternalServerError(description="Unknown error") from generic_ex
 
 
 def validate_square_signature(request):

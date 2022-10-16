@@ -1,231 +1,440 @@
-""" This Cloud Function is triggered on a messaging being published to the 'square.order.created'
-    topic.
+""" This Cloud Function is triggered on a new order document being written to Firestore.
 
-    It reads the webhook and fetches order, payment, and customer information from Square and
-    writes it to a firestore document. Assuming the write to firestore succeeds, we ACK the
-    message on the topic.
+    It reads the document and:
+     - creates a label/printout for the order and stores it in GCS
+     - adds a row to CloudSQL table
 """
 # pylint: disable=redefined-outer-name,unused-argument,no-member
 
-import base64
+# TODO: dynamically scan Jinja2 template to extract required fields and compare
+#       to changes to determine if we need to re-generate label
+
+import copy
+import contextvars
+import enum
 import json
-import logging
 import os
 import re
 
-from google.cloud import firestore
+import jinja2
 
-from square.client import Client
+from sqlalchemy import create_engine
+from sqlalchemy import Column, Integer, String, Float, Enum, Text
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
 
-client = Client(
-    access_token=os.environ['SQUARE_ACCESS_TOKEN'],
-    square_version='2022-02-16',
-    environment=os.environ['SQUARE_ENVIRONMENT'])
+from weasyprint import HTML, CSS
 
-SQUARE_LOCATION = os.environ['SQUARE_LOCATION']
+from google.cloud import storage, firestore
 
-LOGGER = logging.getLogger(__name__)
+GCS_BUCKET = os.environ['GCS_BUCKET']
+GOOGLE_SHEET_URL = os.environ['GOOGLE_SHEET_URL']
 
-# only configure stackdriver logging when running on GCP
-if os.environ.get('FUNCTION_REGION', None):  # pragma: no cover
-    from google.cloud import logging as cloudlogging
-    LOG_CLIENT = cloudlogging.Client()
-    HANDLER = LOG_CLIENT.get_default_handler()
-    LOGGER = logging.getLogger("cloudLogger")
-    LOGGER.addHandler(HANDLER)
+# Instantiates a client
+client = storage.Client()
+
+ctx_id = contextvars.ContextVar("square_order_id", default="")
 
 
-def handle_create(event, context):
-    """ This reads the webhook message off of the pub/sub topic and then queries the Square API to get the detailed order,
-    payment, and customer objects to persist in firestore.
+def log(message, *args, **kwargs):
+    """ logs message using structured logging format """
+    structured_json = {
+        "message": message % args,
+    }
+    if ctx_id.get() != "":
+        structured_json["logging.googleapis.com/labels"] = {
+            "square_order_id": ctx_id.get()
+        }
 
-    If this method throws an Exception, and automatic-retry is enabled, then this will NACK the message to be retried.
-    If this method returns without raising an Exception, then the GCF framework will automatically ACK the message.
-    """
-    # TODO: add webhook message content in a structured way here
-    LOGGER.debug("""Received message '{}' from 'square.order.created' topic""".format(context.event_id))
+    for key, value in kwargs.items():
+        structured_json[key] = value
+    print(json.dumps(structured_json))
 
-    if 'data' not in event:
-        raise KeyError(event)
 
-    webhook_event = json.loads(base64.b64decode(event['data']).decode('utf-8'))
+class OrderState(enum.Enum):
+    """ OrderState docstring """
+    PLACED = 1
+    ARRIVED = 2
+    CANCELLED = 3
 
-    # webhook event should have structure like:
-    # {
-    #   "merchant_id": "5S9MXCS9Y99KK",
-    #   "type": "order.created",
-    #   "event_id": "116038d3-2948-439f-8679-fc86dbf80f69",
-    #   "created_at": "2020-04-16T23:14:26.129Z",
-    #   "data": {
-    #     "type": "order",
-    #     "id": "eA3vssLHKJrv9H0IdJCM3gNqfdcZY",
-    #     "object": {
-    #       "order_created": {
-    #         "created_at": "2020-04-16T23:14:26.129Z",
-    #         "location_id": "FPYCBCHYMXFK1",
-    #         "order_id": "eA3vssLHKJrv9H0IdJCM3gNqfdcZY",
-    #         "state": "OPEN",
-    #         "version": 1
-    #       }
-    #     }
-    #   }
-    # }
 
-    order_id = webhook_event.data.id
-    order = get_square_order(order_id)
-    customer_id = get_customer_id(order)
-    customer = {}
+Base = declarative_base()
 
-    # the square API is eventually consistent, so the first time we try to
-    # extract the customer ID we may need to try again
-    if customer_id is None:
-        LOGGER.debug("didn't find customer_id on first attempt, retrying")
-        order = get_square_order(order_id)
-        customer_id = get_customer_id(order)
-        if customer_id is None:
-            customer = create_faux_customer(order)
 
-    if not customer:
-        customer = get_square_customer(customer_id)
+class Order(Base):  # pylint: disable=too-many-instance-attributes
+    """ Order docstring """
+    __tablename__ = 'orders'  # TODO: add event date into table name to provide separation
 
-    payment_id = get_payment_id(order)
-    payment = get_square_payment(payment_id)
+    id = Column(String(1024), primary_key=True)
+    label_number = Column(Integer)
+    square_order_number = Column(Integer)
+    receipt_url = Column(Text)
+    pickup_window = Column(Text)
+    customer_name = Column(Text)
+    last_name = Column(Text)
+    phone_number = Column(Text)
+    two_piece_meals = Column(Integer, default=0)
+    three_piece_meals = Column(Integer, default=0)
+    mac_and_cheese_meals = Column(Integer, default=0)
+    beers = Column(Text)
+    tip = Column(Float, default=0)
+    total = Column(Float, default=0)
+    fees = Column(Float, default=0)
+    note = Column(Text, nullable=True)
+    status = Column(Enum(OrderState))
+    checkin_time = Column(Text, nullable=True)
+    label_url = Column(Text)
 
-    doc = {
-        u'order': order,
-        u'customer': customer,
-        u'payment': payment
+    def __repr__(self):
+        return f'Order {self.id} - SON {self.square_order_number} - {self.customer_name}'
+
+    def __init__(self, doc: dict):
+        self.__update_id(doc)
+        self.__update_label_number(doc)
+        self.__update_square_order_number(doc)
+        self.__update_receipt_url(doc)
+        self.__update_pickup_window(doc)
+        self.__update_customer_name(doc)
+        self.__update_last_name(doc)
+        self.__update_phone_number(doc)
+        self.__update_meals(doc)
+        self.__update_beers(doc)
+        self.__update_tip(doc)
+        self.__update_total(doc)
+        self.__update_fees(doc)
+        self.__update_note(doc)
+        self.__update_status(doc)
+        self.__update_checkin_time(doc)
+
+    def __update_id(self, doc):
+        self.id = doc['order']['id']  # pylint: disable=invalid-name
+        return False
+
+    def __update_label_number(self, doc):
+        self.label_number = doc['order_number']
+        return False
+
+    def __update_square_order_number(self, doc):
+        self.square_order_number = doc['payment']['reference_id']
+        return True
+
+    def __update_receipt_url(self, doc):
+        self.receipt_url = doc['payment']['receipt_url']
+        return False
+
+    def __update_pickup_window(self, doc):
+        self.pickup_window = extract_pickup_time(doc['order'])
+        return False
+
+    def __update_customer_name(self, doc):
+        given_name = doc['customer'].get('given_name')
+        family_name = doc['customer'].get('family_name')
+        if not given_name or not family_name:
+            display_name = \
+                doc['order']['fulfillments'][0]['pickup_details']['recipient'].get('display_name')
+            if display_name:
+                name_tokens = display_name.split(" ")
+                given_name = " ".join(name_tokens[:-1])
+                family_name = name_tokens[-1]
+        self.customer_name = f"{given_name} {family_name}".title()
+        return True
+
+    def __update_last_name(self, doc):
+        family_name = doc['customer'].get('family_name')
+        if not family_name:
+            display_name = \
+                doc['order']['fulfillments'][0]['pickup_details']['recipient'].get('display_name')
+            if display_name:
+                name_tokens = display_name.split(" ")
+                family_name = name_tokens[-1]
+        self.last_name = family_name.title()
+        return False
+
+    def __update_phone_number(self, doc):
+        phone_number = doc['customer'].get('phone_number')
+        if not phone_number:
+            phone_number = \
+                doc['order']['fulfillments'][0]['pickup_details']['recipient'].get('phone_number')
+        self.phone_number = phone_number.replace("+", "").replace("-", "")
+        return True
+
+    def __update_meals(self, doc):
+        self.two_piece_meals, self.three_piece_meals, self.mac_and_cheese_meals = \
+            extract_meal_counts(doc['order'])
+        return True
+
+    def __update_beers(self, doc):
+        self.beers = json.dumps(extract_beers(doc['order']))
+        return True
+
+    def __update_tip(self, doc):
+        self.tip = doc['order']['total_tip_money']['amount'] / 100
+        return False
+
+    def __update_total(self, doc):
+        self.total = doc['order']['total_money']['amount'] / 100
+        return True
+
+    def __update_fees(self, doc):
+        try:
+            self.fees = doc['payment']['processing_fee'][0]['amount_money']['amount'] / 100
+        except Exception as e:
+            log("exception determining fees: %s", e)
+        return False
+
+    def __update_note(self, doc):
+        note = doc['order'].get('note')
+        if not note:
+            note = doc['order']['fulfillments'][0]['pickup_details'].get('note')
+        self.note = note
+        return True
+
+    def __update_status(self, doc):
+        try:
+            self.status = OrderState[doc['pickup']['status']]
+        except Exception:
+            self.status = OrderState.PLACED
+        return False
+
+    def __update_checkin_time(self, doc):
+        try:
+            self.checkin_time = doc['pickup']['checkin_time']
+        except Exception:
+            self.checkin_time = None
+        return False
+
+    update_map = {
+        re.compile(r"^order.id$"): ['_Order__update_id'],
+        re.compile(r"^order_number$"): ['_Order__update_label_number'],
+        re.compile(r"^payment.reference_id$"): ['_Order__update_square_order_number'],
+        re.compile(r"^payment.receipt_url$"): ['_Order__update_receipt_url'],
+        re.compile(r"^order.line_items.*"): ['_Order__update_pickup_window',
+                                             '_Order__update_meals',
+                                             '_Order__update_beers'],
+        re.compile(r"^order.fulfillments$"): ['_Order__update_customer_name',
+                                              '_Order__update_last_name',
+                                              '_Order__update_note'],
+        re.compile(r"^customer.given_name$"): ['_Order__update_customer_name'],
+        re.compile(r"^customer.family_name$"): ['_Order__update_customer_name',
+                                                '_Order__update_last_name'],
+        re.compile(r"^customer.phone_number$"): ['_Order__update_phone_number'],
+        re.compile(r"^order.total_tip_money.amount$"): ['_Order__update_tip'],
+        re.compile(r"^order.total_money.amount$"): ['_Order__update_total'],
+        re.compile(r"^payment.processing_fee.*"): ['_Order__update_fees'],
+        re.compile(r"^order.note$"): ['_Order__update_note'],
+        re.compile(r"^pickup.*"): ['_Order__update_status',
+                                   '_Order__update_checkin_time']
     }
 
-    commit_to_firestore(doc)
+    def update(self, update_mask, context):
+        """ updates Python/ORM object based on field paths in update_mask """
+        label_update = False
+
+        doc = fetch_document_from_firestore(context)
+        # iterate over field paths updating appropriate properties on order object
+        for field_path in update_mask['fieldPaths']:
+            for regex, funcs in self.update_map.items():
+                if regex.match(field_path):
+                    for func in funcs:
+                        if getattr(self, func)(doc):
+                            label_update = True
+
+        return label_update
 
 
-def get_square_order(order_id: str):
-    """ Gets Square Order object for given id value from Square API
+def extract_pickup_time(order) -> str:
+    """ extracts the earliest pickup time from an order"""
+    min_pickup_time = ""
+    for line_item in order['line_items']:
+        if line_item['name'] == "Fried Fish" and line_item['variation_name']:
+            if min_pickup_time == "" or line_item['variation_name'] < min_pickup_time:
+                min_pickup_time = line_item['variation_name']
 
-    Raises exception if there was any error (transient or invalid order ID)
+    if min_pickup_time == "":
+        min_pickup_time = "5:30PM-5:45PM"
+
+    return min_pickup_time
+
+
+def extract_meal_counts(order):
+    """ This extracts the count of each type of meal (two piece / three piece / m&c)"""
+    two_piece = 0
+    three_piece = 0
+    mac_and_cheese = 0
+
+    for line_item in order['line_items']:
+        if line_item['name'] == "Fried Fish":
+            for modifier in line_item['modifiers']:
+                if modifier['name'] == "3 Pieces of Fried Cod":
+                    three_piece += int(line_item['quantity'])
+                    break
+                if modifier['name'] == "2 Pieces of Fried Cod":
+                    two_piece += int(line_item['quantity'])
+                    break
+        elif line_item['name'] == "Mac & Cheese":
+            mac_and_cheese += int(line_item['quantity'])
+
+    return two_piece, three_piece, mac_and_cheese
+
+
+def extract_beers(order):
+    """ This extracts a list of KVPs of type of beer and quantity """
+    beers = {}
+    for line_item in order['line_items']:
+        if line_item['name'] == "6 Pack of 12oz Brüeprint Brewing Company Beer Cans - Ticket":
+            if not beers.get(line_item['variation_name']):
+                beers[line_item['variation_name']] = 0
+            beers[line_item['variation_name']] += int(line_item['quantity'])
+
+    return beers
+
+
+db_user = os.environ["DB_USER"]
+db_pass = os.environ["DB_PASS"]
+db_name = os.environ["DB_NAME"]
+db_socket_dir = os.environ.get("DB_SOCKET_DIR", "/cloudsql")
+instance_connection_name = os.environ["INSTANCE_CONNECTION_NAME"]
+mysql_engine = create_engine(
+    f'mysql+pymysql://{db_user}:{db_pass}@/{db_name}?'
+    f'unix_socket={db_socket_dir}/{instance_connection_name}'
+)
+
+sheets_engine = create_engine("shillelagh://",
+                              adapters=["gsheetsapi"],
+                              adapter_kwargs={
+                                    "gsheetsapi": {
+                                        "app_default_credentials": True,
+                                        "catalog": {
+                                            Order.__tablename__: GOOGLE_SHEET_URL
+                                        }
+                                    }
+                              })
+
+mysql_sessionmaker = sessionmaker(bind=mysql_engine)
+mysql_session = mysql_sessionmaker()
+
+sheets_sessionmaker = sessionmaker(bind=sheets_engine)
+sheets_session = sheets_sessionmaker()
+
+
+def handle_created(data, context):
+    """ This is called when a new document is added to Firestore. Unfortunately the view
+        passed in under data['value'] is not easily converted to a Python dict, so we
+        simply fetch the referenced doc from Firestore before proceeding. There is a small
+        race condition in that we read a more up to date version of the document than was
+        initially created but we take that risk knowingly here.
     """
-    orders_api = client.orders
 
-    body = {
-        u'location_id': SQUARE_LOCATION,
-        u'order_ids': [order_id]
-    }
+    doc = fetch_document_from_firestore(context)
 
-    result = orders_api.batch_retrieve_orders(body)
-    if result.is_success():
-        return result.body.orders[0]
-    return Exception(result)
+    # Create Order object
+    order = Order(doc)
+    ctx_id.set(order.id)
+
+    # Create label pdf
+    pdf_bytes = create_label(order)
+
+    # Store to GCS, get URL, update order object
+    order.label_url = store_label_to_gcs(pdf_bytes, order)
+
+    sheets_order = copy.deepcopy(order)
+
+    # Commit to mysql
+    mysql_session.add(order)
+    order.__table__.create(mysql_engine, checkfirst=True)
+    mysql_session.commit()
+
+    # Commit to sheets
+    sheets_order.__table__.create(sheets_engine, checkfirst=True)
+    sheets_session.add(sheets_order)
+    sheets_session.commit()
 
 
-def get_customer_id(order) -> str:
-    """ Extracts the customer ID value from a given order request
-
-    Returns None if it can not be found in order
+def handle_updated(data, context):
+    """ This fires when a firestore document has been updated (either manually or due to a Square
+    Webhook order.updated event firing and updating our local copy)
     """
-    if order.fulfillments[0].type == "DIGITAL" and order.customer_id is not None:
-        return order.customer_id
+    log("handle_update entered: %s", context)
 
-    return None
+    # try fetching existing order from mysql
+    order_id = data['value']['fields']['order']['mapValue']['fields']['id']['stringValue']
+    ctx_id.set(order_id)
+
+    log(f"update requested with mask {data['updateMask']}", request=data)
+    order = mysql_session.query(Order).filter_by(id=order_id).one_or_none()
+
+    if not order:
+        log("requested to update a record in CloudSQL that we couldn't find")
+        mysql_session.close()
+        handle_created(data, context)
+        return
+
+    # recreate label pdf if needed (check for update to name, order counts, phone #, total, beers)
+    if order.update(data['updateMask'], context):
+        log("update requires new label to be generated")
+        # Create label pdf
+        pdf_bytes = create_label(order)
+
+        # Store to GCS, get URL, update order object
+        order.label_url = store_label_to_gcs(pdf_bytes, order)
+
+    # Commit updated order to mysql
+    mysql_session.commit()
+
+    # Commit updated order to sheets
+    sheets_order = sheets_session.query(Order).filter_by(id=order_id).one_or_none()
+    sheets_order.update(data['updateMask'], context)
+    sheets_order.label_url = order.label_url
+
+    sheets_session.commit()
 
 
-def get_square_customer(customer_id: str):
-    """ Gets Square Customer object for given id value from Square API
+def fetch_document_from_firestore(context):
+    """ this grabs the document from Firestore and returns as a Python dict """
 
-    Raises exception if there was any error (transient or invalid customer ID)
+    # extract relevant document & collection paths
+    path_parts = context.resource.split('/documents/')[1].split('/')
+    collection_path = path_parts[0]
+    document_path = '/'.join(path_parts[1:])
+
+    fs_client = firestore.Client()
+    doc = fs_client.collection(collection_path).document(document_path)
+
+    doc_snap = doc.get()
+
+    if doc_snap.exists:
+        return doc_snap.to_dict()
+
+    raise KeyError(f"could not find {context.resource} in Firestore")
+
+
+def create_label(order):
+    """ create label for given order """
+    template_loader = jinja2.FileSystemLoader(searchpath="./")
+    template_env = jinja2.Environment(loader=template_loader)
+    template_file = "label_template.html"
+    template = template_env.get_template(template_file)
+
+    output_text = template.render(order=order, beers=json.loads(order.beers))
+
+    html_renderer = HTML(string=output_text)
+
+    return html_renderer.write_pdf(stylesheets=[
+        CSS('label.css'),
+        "https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css"])
+
+
+def store_label_to_gcs(pdf_bytes, order):
+    """ writes PDF bytes to GCS bucket, naming file by:
+
+    "last_name - square_order_number.pdf"
     """
-    customers_api = client.customers
-
-    result = customers_api.retrieve_customer(customer_id)
-    if result.is_success():
-        return result.body.customer
-    return Exception(result)
-
-
-def create_faux_customer(order):
-    """ Creates faux customer object from information within order
-    """
-
-    recipient = order.fulfillments[0].pickup_details.recipient
-    name_tokens = recipient.display_name.split(" ")
-
-    phone_number = re.sub(r'\+1|\-|\(|\)', "", recipient.phone_number)
-
-    customer = {
-        u'given_name': " ".join(name_tokens[:-1]),
-        u'family_name': name_tokens[-1],
-        u'phone_number': phone_number
-    }
-
-    return customer
-
-
-def get_payment_id(order) -> str:
-    """ Extracts the payment ID value from a given order request
-
-    Returns None if it can not be found in order
-    """
-    return order.tenders[0].id if len(order.tenders) == 1 else None
-
-
-def get_square_payment(payment_id: str):
-    """ Gets Square Payment object for given id value from Square API
-
-    Raises exception if there was any error (transient or invalid payment ID)
-    """
-    payments_api = client.payments
-
-    result = payments_api.get_payment(payment_id)
-    if result.is_success():
-        return result.body.payment
-    return Exception(result)
-
-
-def commit_to_firestore(doc: dict):
-    """ Writes the combined order, payment, and customer information to firestore
-    """
-
-    db = firestore.Client()
-    event_ref = db.collection(u'events').document(os.environ['EVENT_DATE'])
-    order_counter_ref = event_ref.get('order_counter')
-    if not order_counter_ref.exists:
-        order_counter_ref.set(1000)
-    order_num_result = order_counter_ref.update({"order_counter": firestore.Increment(1)})
-    doc.order_number = order_num_result.transform_results[0].integer_value
-    #TODO: set order_number back on square order metadata field?
-
-    order_ref = event_ref.collection(u'orders').document(doc.order.id)
-    order_ref.set(doc)
-
-
-def handle_update(event, context):
-    """ Webhook fires with this
-    {
-  "merchant_id": "5S9MXCS9Y99KK",
-  "type": "order.updated",
-  "event_id": "4b8e5c91-9f17-4cf1-900a-4a0629f81add",
-  "created_at": "2020-04-16T23:14:26.359Z",
-  "data": {
-    "type": "order",
-    "id": "eA3vssLHKJrv9H0IdJCM3gNqfdcZY",
-    "object": {
-      "order_updated": {
-        "created_at": "2020-04-16T23:14:26.129Z",
-        "location_id": "FPYCBCHYMXFK1",
-        "order_id": "eA3vssLHKJrv9H0IdJCM3gNqfdcZY",
-        "state": "OPEN",
-        "updated_at": "2020-04-16T23:14:26.359Z",
-        "version": 2
-      }
-    }
-  }
-}
-    """
-    # fetch order id, customer id, payment id and subsequent objects
-    # can call doc_ref.update({
-    # u'order':order,
-    # u'payment': payment,
-    # u'customer': customer
-    # })
-    # this will keep the atomically incremented order count fixed
-    pass
+    bucket = client.get_bucket(GCS_BUCKET)
+    # create filename
+    file_name = f"{os.environ['EVENT_DATE']}/{order.last_name} - {order.square_order_number}.pdf"
+    log("uploading label file to GCS bucket as %s", file_name)
+    blob = bucket.get_blob(file_name)
+    if not blob:
+        blob = bucket.blob(file_name)
+    blob.upload_from_string(pdf_bytes, content_type='application/pdf')
+    return blob.self_link
