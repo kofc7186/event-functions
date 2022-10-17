@@ -1,30 +1,25 @@
-name: "square-webhook: Unit Tests"
+name: "sql-mgr: Unit Tests"
 
 on:
   push:
     branches-ignore:
       - main
     paths:
-      - 'square-webhook/**'
+      - 'sql-mgr/**'
   pull_request:
     branches: [ main ]
     paths:
-      - 'square-webhook/**'
+      - 'sql-mgr/**'
   workflow_dispatch:
 
 defaults:
   run:
     shell: bash
-    working-directory: square-webhook
+    working-directory: sql-mgr
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    services:
-      pubsub:
-        image: knarz/pubsub-emulator
-        ports:
-          - 8085/tcp
     steps:
       - uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3.1.0
 
@@ -38,8 +33,6 @@ jobs:
           python -m pip install -q --upgrade pip
           pip install -r requirements.txt
           echo "GCP_PROJECT=square-webhook-123456" >> $GITHUB_ENV
-          echo "PUBSUB_EMULATOR_HOST=127.0.0.1:${{ job.services.pubsub.ports['8085'] }}" >> $GITHUB_ENV
-          echo "PUBSUB_PROJECT_ID=square-webhook-123456" >> $GITHUB_ENV
 
       - name: Lint with flake8
         run: |
@@ -48,19 +41,3 @@ jobs:
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
           # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-
-      - name: Run unit tests
-        run: |
-          pytest -s -o log_cli=True test_unit.py
-
-      - name: Run unit tests with coverage
-        run: |
-          pytest --cov=. --cov-report term-missing test_unit.py
-
-      - name: Run integration tests
-        run: |
-          pytest -s -o log_cli=True --log-level DEBUG test_integration.py
-
-      - name: Run integration tests with coverage
-        run: |
-          pytest --cov=. --cov-report term-missing test_integration.py

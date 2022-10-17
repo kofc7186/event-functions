@@ -1,0 +1,61 @@
+name: "firestore-mgr: Deploy to GCP"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'firestore-mgr/**'
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+    working-directory: firestore-mgr
+
+jobs:
+  deploy:
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3.1.0
+
+      - name: Set up auth
+        uses: google-github-actions/auth@c4799db9111fba4461e9f9da8732e5057b394f72 # v0.8.3
+        with:
+          workload_identity_provider: projects/194415472833/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions@serverless-fish-fry.iam.gserviceaccount.com
+          create_credentials_file: 'true'
+
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@ee9693ff89cdf73862b8a13988f6a71070e8fc58 # v0.6.2
+        with:
+          project_id: serverless-fish-fry
+
+      - name: "Export environment variables to yaml file"
+        env:
+          SQUARE_ENVIRONMENT: production
+          EVENT_DATE: "2022-11-05"
+        run: |
+          echo "SQUARE_ACCESS_TOKEN: \"${{ secrets.SQUARE_ACCESS_TOKEN }}\"" > .env.yaml
+          echo "SQUARE_ENVIRONMENT: \"${SQUARE_ENVIRONMENT}\"" >> .env.yaml
+          echo "SQUARE_LOCATION: \"${{ secrets.SQUARE_LOCATION }}\"" >> .env.yaml
+          echo "EVENT_DATE: \"${EVENT_DATE}\"" >> .env.yaml
+
+      - name: "Deploy firestore-mgr-created function with a Firestore trigger"
+        run: |
+          gcloud functions deploy firestore-mgr-created --region us-east1 \
+          --entry-point handle_created --env-vars-file .env.yaml \
+          --runtime python310 --memory=256MB \
+          --trigger-event "providers/cloud.firestore/eventTypes/document.create" \
+          --trigger-resource "projects/serverless-fish-fry/databases/(default)/documents/events/2022-11-05/orders/{order}"
+
+      - name: "Deploy firestore-mgr-updated function with a Firestore trigger"
+        run: |
+          gcloud functions deploy firestore-mgr-updated --region us-east1 \
+          --entry-point handle_updated --env-vars-file .env.yaml \
+          --runtime python310 --memory=256MB \
+          --trigger-event "providers/cloud.firestore/eventTypes/document.update" \
+          --trigger-resource "projects/serverless-fish-fry/databases/(default)/documents/events/2022-11-05/orders/{order}"
