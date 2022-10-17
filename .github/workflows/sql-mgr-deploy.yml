@@ -1,0 +1,49 @@
+name: "sql-mgr: Deploy to GCP"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'sql-mgr/**'
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+    working-directory: sql-mgr
+
+jobs:
+  deploy:
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93ea575cb5d8a053eaa0ac8fa3b40d7e05a33cc8 # v3.1.0
+
+      - name: Set up auth
+        uses: google-github-actions/auth@c4799db9111fba4461e9f9da8732e5057b394f72 # v0.8.3
+        with:
+          workload_identity_provider: projects/194415472833/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions@serverless-fish-fry.iam.gserviceaccount.com
+          create_credentials_file: 'true'
+
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@ee9693ff89cdf73862b8a13988f6a71070e8fc58 # v0.6.2
+        with:
+          project_id: serverless-fish-fry
+
+      - name: "Export environment variables to yaml file"
+        env:
+          GCS_BUCKET: kofc7186-fishfry
+          EVENT_DATE: "2022-11-05"
+        run: |
+          echo "GCS_BUCKET: \"${GCS_BUCKET}\"" > .env.yaml
+          echo "EVENT_DATE: \"${EVENT_DATE}\"" >> .env.yaml
+
+      - name: "Deploy print function with a HTTP trigger"
+        run: |
+          gcloud functions deploy print --region us-east1 --entry-point handle_print \
+          --env-vars-file .env.yaml --runtime python310 --memory=128MB --trigger-http \
+          --allow-unauthenticated
