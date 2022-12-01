@@ -1,5 +1,5 @@
 google-cloud-firestore==2.7.2
-google-cloud-storage==2.5.0
+google-cloud-storage==2.6.0
 google-cloud-pubsub==2.13.10
 pytest-mock==3.10.0
 flask==2.2.2
