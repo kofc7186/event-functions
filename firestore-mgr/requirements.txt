@@ -4,5 +4,5 @@ pytest-mock==3.10.0
 PyMySQL==1.0.2
 sqlalchemy==1.4.42
 jinja2==3.1.2
-weasyprint==56.1
+weasyprint==57.1
 git+https://github.com/bobcallaway/shillelagh@lastrow#egg=shillelagh
