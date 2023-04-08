@@ -49,4 +49,4 @@ jobs:
       - name: "Deploy square-webhook function with a HTTP trigger"
         run: |
            echo "SQUARE_WEBHOOK_SIGNATURE_KEY: ${{ secrets.SQUARE_WEBHOOK_SIGNATURE_KEY }}" > .env.yaml
-           gcloud functions deploy square-webhook --region us-east1 --entry-point handle_webhook --env-vars-file .env.yaml --runtime python310 --trigger-http --allow-unauthenticated --memory=128MB
+           gcloud functions deploy square-webhook --region us-east1 --entry-point handle_webhook --env-vars-file .env.yaml --runtime python311 --trigger-http --allow-unauthenticated --memory=128MB

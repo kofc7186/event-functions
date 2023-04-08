@@ -37,7 +37,7 @@ jobs:
       - name: "Export environment variables to yaml file"
         env:
           SQUARE_ENVIRONMENT: production
-          EVENT_DATE: "2022-11-05"
+          EVENT_DATE: "2023-04-29"
         run: |
           echo "SQUARE_ACCESS_TOKEN: \"${{ secrets.SQUARE_ACCESS_TOKEN }}\"" > .env.yaml
           echo "SQUARE_ENVIRONMENT: \"${SQUARE_ENVIRONMENT}\"" >> .env.yaml
@@ -52,7 +52,7 @@ jobs:
 
       - name: "Deploy order-mgr-created function with a PubSub trigger"
         run: |
-          gcloud functions deploy order-mgr-order-created --region us-east1 --entry-point handle_order_created --env-vars-file .env.yaml --runtime python310 --trigger-topic square.order.created --memory=128MB
+          gcloud functions deploy order-mgr-order-created --region us-east1 --entry-point handle_order_created --env-vars-file .env.yaml --runtime python311 --trigger-topic square.order.created --memory=128MB
 
       - name: "Create square.order.updated topic for pubsub"
         # if topic already exists this call will fail but that is OK
@@ -62,7 +62,7 @@ jobs:
 
       - name: "Deploy order-mgr-updated function with a PubSub trigger"
         run: |
-          gcloud functions deploy order-mgr-order-updated --region us-east1 --entry-point handle_order_updated --env-vars-file .env.yaml --runtime python310 --trigger-topic square.order.updated --memory=128MB
+          gcloud functions deploy order-mgr-order-updated --region us-east1 --entry-point handle_order_updated --env-vars-file .env.yaml --runtime python311 --trigger-topic square.order.updated --memory=128MB
 
       - name: "Create square.payment.updated topic for pubsub"
         # if topic already exists this call will fail but that is OK
@@ -72,7 +72,7 @@ jobs:
 
       - name: "Deploy order-mgr-payment-updated function with a PubSub trigger"
         run: |
-          gcloud functions deploy order-mgr-payment-updated --region us-east1 --entry-point handle_payment_updated --env-vars-file .env.yaml --runtime python310 --trigger-topic square.payment.updated --memory=128MB
+          gcloud functions deploy order-mgr-payment-updated --region us-east1 --entry-point handle_payment_updated --env-vars-file .env.yaml --runtime python311 --trigger-topic square.payment.updated --memory=128MB
 
       - name: "Create square.customer.updated topic for pubsub"
         # if topic already exists this call will fail but that is OK
@@ -82,4 +82,4 @@ jobs:
 
       - name: "Deploy order-mgr-customer-updated function with a PubSub trigger"
         run: |
-          gcloud functions deploy order-mgr-customer-updated --region us-east1 --entry-point handle_customer_updated --env-vars-file .env.yaml --runtime python310 --trigger-topic square.customer.updated --memory=128MB
+          gcloud functions deploy order-mgr-customer-updated --region us-east1 --entry-point handle_customer_updated --env-vars-file .env.yaml --runtime python311 --trigger-topic square.customer.updated --memory=128MB

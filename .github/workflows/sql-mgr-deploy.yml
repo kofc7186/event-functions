@@ -37,7 +37,7 @@ jobs:
       - name: "Export environment variables to yaml file"
         env:
           GCS_BUCKET: kofc7186-fishfry
-          EVENT_DATE: "2022-11-05"
+          EVENT_DATE: "2023-04-29"
         run: |
           echo "GCS_BUCKET: \"${GCS_BUCKET}\"" > .env.yaml
           echo "EVENT_DATE: \"${EVENT_DATE}\"" >> .env.yaml
@@ -45,5 +45,5 @@ jobs:
       - name: "Deploy print function with a HTTP trigger"
         run: |
           gcloud functions deploy print --region us-east1 --entry-point handle_print \
-          --env-vars-file .env.yaml --runtime python310 --memory=128MB --trigger-http \
+          --env-vars-file .env.yaml --runtime python311 --memory=128MB --trigger-http \
           --allow-unauthenticated
