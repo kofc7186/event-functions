@@ -21,16 +21,16 @@
         {% endif %}
         <thead>
             <tr>
-              <th class="mealHeaderL">Two Piece Fish Meals</th>
-              <th class="mealHeaderMR">Three Piece Fish Meals</th>
-              <th class="mealHeaderMR">Macaroni and Cheese</th>
+              <th class="mealHeaderL">Crawfish Boil Meals</th>
+              <th class="mealHeaderMR">Shrimp Boil Meals</th>
+              <th class="mealHeaderMR">Kids Meals</th>
             </tr>
           </thead>
         <tbody>
             <tr>
-              <td class="mealValueL">{% if order.two_piece_meals > 0 %}{{order.two_piece_meals}}{% endif %}</td>
-              <td class="mealValueMR">{% if order.three_piece_meals > 0 %}{{order.three_piece_meals}}{% endif %}</td>
-              <td class="mealValueMR">{% if order.mac_and_cheese_meals > 0 %}{{order.mac_and_cheese_meals}}{% endif %}</td>
+              <td class="mealValueL">{% if order.crawfish_meals > 0 %}{{order.crawfish_meals}}{% endif %}</td>
+              <td class="mealValueMR">{% if order.shrimp_meals > 0 %}{{order.shrimp_meals}}{% endif %}</td>
+              <td class="mealValueMR">{% if order.kids_meals > 0 %}{{order.kids_meals}}{% endif %}</td>
             </tr>
         </tbody>
       </table>
