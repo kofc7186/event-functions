@@ -65,7 +65,7 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
     """ Order docstring """
     __tablename__ = 'orders'  # TODO: add event date into table name to provide separation
 
-    id = Column(String(1024), primary_key=True)
+    id = Column(String(256), primary_key=True)
     label_number = Column(Integer)
     square_order_number = Column(Integer)
     receipt_url = Column(Text)
@@ -73,8 +73,8 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
     customer_name = Column(Text)
     last_name = Column(Text)
     phone_number = Column(Text)
-    crawfish_meals = Column(Integer, default=0)
-    shrimp_meals = Column(Integer, default=0)
+    jambalaya_meals = Column(Integer, default=0)
+    pastalaya_meals = Column(Integer, default=0)
     kids_meals = Column(Integer, default=0)
     beers = Column(Text)
     tip = Column(Float, default=0)
@@ -159,7 +159,7 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
         return True
 
     def __update_meals(self, doc):
-        self.crawfish_meals, self.shrimp_meals, self.kids_meals = \
+        self.jambalaya_meals, self.pastalaya_meals, self.kids_meals = \
             extract_meal_counts(doc['order'])
         return True
 
@@ -246,7 +246,7 @@ def extract_pickup_time(order) -> str:
     """ extracts the earliest pickup time from an order"""
     min_pickup_time = ""
     for line_item in order['line_items']:
-        if (line_item['name'] == "Crawfish Boil Meal" or line_item['name'] == "Shrimp Boil Meal") \
+        if (line_item['name'] == "Jambalaya Meal" or line_item['name'] == "Pasta-laya Meal") \
                 and line_item['variation_name']:
             if min_pickup_time == "" or line_item['variation_name'] < min_pickup_time:
                 min_pickup_time = line_item['variation_name']
@@ -258,34 +258,34 @@ def extract_pickup_time(order) -> str:
 
 
 def extract_meal_counts(order):
-    """ This extracts the count of each type of meal (crawfish / shrimp / kids)"""
-    crawfish = 0
-    shrimp = 0
+    """ This extracts the count of each type of meal (jambalaya / pastalaya / kids)"""
+    jambalaya = 0
+    pastalaya = 0
     kids = 0
 
     for line_item in order['line_items']:
-        if line_item['name'] == "Crawfish Boil Meal":
-            crawfish += int(line_item['quantity'])
-        elif line_item['name'] == "Shrimp Boil Meal":
-            shrimp += int(line_item['quantity'])
+        if line_item['name'] == "Jambalaya Meal":
+            jambalaya += int(line_item['quantity'])
+        elif line_item['name'] == "Pasta-laya Meal":
+            pastalaya += int(line_item['quantity'])
         elif line_item['name'] == "Kids Meal":
             kids += int(line_item['quantity'])
 
-    return crawfish, shrimp, kids
+    return jambalaya, pastalaya, kids
 
 
 def extract_beers(order):
     """ This extracts a list of KVPs of type of beer and quantity """
     beers = {}
     for line_item in order['line_items']:
-        if line_item['name'] == "Brüeprint Can Beer Ticket":
-            if not beers.get("Cans"):
-                beers["Cans"] = 0
-            beers["Cans"] += int(line_item['quantity'])
-        elif line_item['name'] == "Brüeprint Draft Beer Ticket":
-            if not beers.get("Draft"):
-                beers["Draft"] = 0
-            beers["Draft"] += int(line_item['quantity'])
+        if line_item['name'] == "Southern Peak Beer Ticket":
+            if not beers.get("Ticket"):
+                beers["Ticket"] = 0
+            beers["Ticket"] += int(line_item['quantity'])
+#        elif line_item['name'] == "Brüeprint Draft Beer Ticket":
+#            if not beers.get("Draft"):
+#                beers["Draft"] = 0
+#            beers["Draft"] += int(line_item['quantity'])
 
     return beers
 
@@ -293,12 +293,17 @@ def extract_beers(order):
 db_user = os.environ["DB_USER"]
 db_pass = os.environ["DB_PASS"]
 db_name = os.environ["DB_NAME"]
-db_socket_dir = os.environ.get("DB_SOCKET_DIR", "/cloudsql")
-instance_connection_name = os.environ["INSTANCE_CONNECTION_NAME"]
+db_host = os.environ["DB_HOST"]
+db_port = os.environ["DB_PORT"]
 mysql_engine = create_engine(
-    f'mysql+pymysql://{db_user}:{db_pass}@/{db_name}?'
-    f'unix_socket={db_socket_dir}/{instance_connection_name}'
+    f'mysql+pymysql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}'
 )
+#db_socket_dir = os.environ.get("DB_SOCKET_DIR", "/cloudsql")
+#instance_connection_name = os.environ["INSTANCE_CONNECTION_NAME"]
+#mysql_engine = create_engine(
+#    f'mysql+pymysql://{db_user}:{db_pass}@/{db_name}?'
+#    f'unix_socket={db_socket_dir}/{instance_connection_name}'
+#)
 
 sheets_engine = create_engine("shillelagh://",
                               adapters=["gsheetsapi"],

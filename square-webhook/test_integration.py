@@ -35,7 +35,7 @@ SUBSCRIPTION_PATH = "projects/%s/subscriptions/test_handle_webhook_valid" % \
 def mock_setup(monkeypatch):
     """ Pytest fixture to set up relevant mocks for pubsub client """
     monkeypatch.setenv("SQUARE_WEBHOOK_SIGNATURE_KEY", KEY)
-    monkeypatch.setenv("FUNCTION_NAME", "test_handle_webhook_valid")
+    monkeypatch.setenv("K_SERVICE", "test_handle_webhook_valid")
 
     client = pubsub_v1.PublisherClient()
     topic_name = client.topic_path(os.environ["GCP_PROJECT"], "square.order.created")
@@ -62,7 +62,7 @@ def mock_setup(monkeypatch):
 def test_handle_webhook_publish_timeout(app, mocker, mock_setup):
     """ test that if the publish call to pubsub times out, we send a non-200 response """
     base_url = "functions.googlecloud.com"
-    function_name = "/" + os.environ["FUNCTION_NAME"]
+    function_name = "/" + os.environ["K_SERVICE"]
     path = "/test_handle_webhook_valid"
     content = {
         "merchant_id": "merchantID",
@@ -91,7 +91,7 @@ def test_handle_webhook_without_topic(app, mocker, mock_setup):
         we fail elegantly
     """
     base_url = "functions.googlecloud.com"
-    function_name = "/" + os.environ["FUNCTION_NAME"]
+    function_name = "/" + os.environ["K_SERVICE"]
     path = "/test_handle_webhook_valid"
     content = {
         "merchant_id": "merchantID",
@@ -116,7 +116,7 @@ def test_handle_webhook_without_topic(app, mocker, mock_setup):
 def test_handle_webhook_valid(app, mock_setup):
     """ tests that a valid message is successfully processed by the function """
     base_url = "functions.googlecloud.com"
-    function_name = "/" + os.environ["FUNCTION_NAME"]
+    function_name = "/" + os.environ["K_SERVICE"]
     path = "/test_handle_webhook_valid"
     content = {
         "merchant_id": "merchantID",

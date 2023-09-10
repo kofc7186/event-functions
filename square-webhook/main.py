@@ -113,7 +113,7 @@ def validate_square_signature(request):
     key = os.environ['SQUARE_WEBHOOK_SIGNATURE_KEY']
     sig_from_header = request.headers['X-Square-Signature']
     # cloud functions does not set flaskRequest.url with the correct values so we have to munge it
-    url = request.url.replace("http", "https").rstrip('/') + '/' + os.environ['FUNCTION_NAME']
+    url = request.url.replace("http", "https").rstrip('/') + '/' + os.environ['K_SERVICE']
 
     string_to_sign = url.encode('utf-8') + request.data
 

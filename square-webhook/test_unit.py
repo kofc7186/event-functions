@@ -29,7 +29,7 @@ KEY = "abc123def456"
 def mock_set_env_webhook_signature_key(monkeypatch):
     """ Pytest fixture that sets the environment variables required to run the function. """
     monkeypatch.setenv("SQUARE_WEBHOOK_SIGNATURE_KEY", KEY)
-    monkeypatch.setenv("FUNCTION_NAME", "test_handle_webhook_valid")
+    monkeypatch.setenv("K_SERVICE", "test_handle_webhook_valid")
 
 
 def test_handle_webhook_empty_webhook_key(app, monkeypatch):

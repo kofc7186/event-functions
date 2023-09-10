@@ -198,7 +198,9 @@ def create_faux_customer(order):
     recipient = order['fulfillments'][0]['pickup_details']['recipient']
     name_tokens = recipient['display_name'].split(" ")
 
-    phone_number = re.sub(r'\+1|\-|\(|\)|\s', "", recipient['phone_number'])
+    phone_number = "unknown"
+    if recipient.get('phone_number'):
+        phone_number = re.sub(r'\+1|\-|\(|\)|\s', "", recipient['phone_number'])
 
     customer = {
         'given_name': " ".join(name_tokens[:-1]),
