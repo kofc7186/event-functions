@@ -37,7 +37,7 @@ jobs:
       - name: "Export environment variables to yaml file"
         env:
           GCS_BUCKET: kofc7186-fishfry
-          EVENT_DATE: "2023-04-29"
+          EVENT_DATE: "2023-09-30"
         run: |
           echo "GCS_BUCKET: \"${GCS_BUCKET}\"" > .env.yaml
           echo "EVENT_DATE: \"${EVENT_DATE}\"" >> .env.yaml
