@@ -1,4 +1,4 @@
-google-cloud-firestore==2.7.2
+google-cloud-firestore==2.11.1
 google-cloud-storage==2.8.0
 pytest-mock==3.10.0
 PyMySQL==1.0.3
