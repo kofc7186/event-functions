@@ -1,11 +1,11 @@
 name: "square-webhook: Deploy to GCP"
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'square-webhook/**'
+#  push:
+#    branches:
+#      - main
+#    paths:
+#      - 'square-webhook/**'
   workflow_dispatch:
 
 defaults:

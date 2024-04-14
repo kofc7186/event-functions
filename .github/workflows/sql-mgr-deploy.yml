@@ -1,11 +1,11 @@
 name: "sql-mgr: Deploy to GCP"
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'sql-mgr/**'
+#  push:
+#    branches:
+#      - main
+#    paths:
+#      - 'sql-mgr/**'
   workflow_dispatch:
 
 defaults:
@@ -37,7 +37,7 @@ jobs:
       - name: "Export environment variables to yaml file"
         env:
           GCS_BUCKET: kofc7186-fishfry
-          EVENT_DATE: "2023-09-30"
+          EVENT_DATE: "2024-04-27"
         run: |
           echo "GCS_BUCKET: \"${GCS_BUCKET}\"" > .env.yaml
           echo "EVENT_DATE: \"${EVENT_DATE}\"" >> .env.yaml

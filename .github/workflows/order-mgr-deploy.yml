@@ -1,11 +1,11 @@
 name: "order-mgr: Deploy to GCP"
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'order-mgr/**'
+#  push:
+#    branches:
+#      - main
+#    paths:
+#      - 'order-mgr/**'
   workflow_dispatch:
 
 defaults:
@@ -37,7 +37,7 @@ jobs:
       - name: "Export environment variables to yaml file"
         env:
           SQUARE_ENVIRONMENT: production
-          EVENT_DATE: "2023-09-30"
+          EVENT_DATE: "2024-04-27"
         run: |
           echo "SQUARE_ACCESS_TOKEN: \"${{ secrets.SQUARE_ACCESS_TOKEN }}\"" > .env.yaml
           echo "SQUARE_ENVIRONMENT: \"${SQUARE_ENVIRONMENT}\"" >> .env.yaml

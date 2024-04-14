@@ -73,9 +73,8 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
     customer_name = Column(Text)
     last_name = Column(Text)
     phone_number = Column(Text)
-    jambalaya_meals = Column(Integer, default=0)
-    pastalaya_meals = Column(Integer, default=0)
-    kids_meals = Column(Integer, default=0)
+    shrimp_boil_meals = Column(Integer, default=0)
+    mac_and_cheese_meals = Column(Integer, default=0)
     beers = Column(Text)
     tip = Column(Float, default=0)
     total = Column(Float, default=0)
@@ -159,7 +158,7 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
         return True
 
     def __update_meals(self, doc):
-        self.jambalaya_meals, self.pastalaya_meals, self.kids_meals = \
+        self.shrimp_boil_meals, self.mac_and_cheese_meals = \
             extract_meal_counts(doc['order'])
         return True
 
@@ -246,8 +245,7 @@ def extract_pickup_time(order) -> str:
     """ extracts the earliest pickup time from an order"""
     min_pickup_time = ""
     for line_item in order['line_items']:
-        if (line_item['name'] == "Jambalaya Meal" or line_item['name'] == "Pasta-laya Meal") \
-                and line_item['variation_name']:
+        if (line_item['name'] == "Shrimp Boil Meal") and line_item['variation_name']:
             if min_pickup_time == "" or line_item['variation_name'] < min_pickup_time:
                 min_pickup_time = line_item['variation_name']
 
@@ -258,27 +256,24 @@ def extract_pickup_time(order) -> str:
 
 
 def extract_meal_counts(order):
-    """ This extracts the count of each type of meal (jambalaya / pastalaya / kids)"""
-    jambalaya = 0
-    pastalaya = 0
-    kids = 0
+    """ This extracts the count of each type of meal (shrimp / mac_and_cheese)"""
+    shrimp = 0
+    mac_and_cheese = 0
 
     for line_item in order['line_items']:
-        if line_item['name'] == "Jambalaya Meal":
-            jambalaya += int(line_item['quantity'])
-        elif line_item['name'] == "Pasta-laya Meal":
-            pastalaya += int(line_item['quantity'])
-        elif line_item['name'] == "Kids Meal":
-            kids += int(line_item['quantity'])
+        if line_item['name'] == "Shrimp Boil Meal":
+            shrimp += int(line_item['quantity'])
+        elif line_item['name'] == "Mac & Cheese":
+            mac_and_cheese += int(line_item['quantity'])
 
-    return jambalaya, pastalaya, kids
+    return shrimp, mac_and_cheese
 
 
 def extract_beers(order):
     """ This extracts a list of KVPs of type of beer and quantity """
     beers = {}
     for line_item in order['line_items']:
-        if line_item['name'] == "Southern Peak Beer Ticket":
+        if line_item['name'] == "Drink Ticket (Beer or Wine)":
             if not beers.get("Ticket"):
                 beers["Ticket"] = 0
             beers["Ticket"] += int(line_item['quantity'])
