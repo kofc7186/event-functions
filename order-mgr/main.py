@@ -74,7 +74,7 @@ def handle_payment_updated(event, context):
     log("Received pubsub message_id '%s' from 'square.payment.updated' topic", context.event_id)
     webhook_event = json.loads(base64.b64decode(event['data']).decode('utf-8'))
 
-    payment = webhook_event['data']['object']
+    payment = webhook_event['data']['object']['payment']
     order_id = payment['order_id']
 
     doc = build_doc_from_event(None, order_id=order_id, payment=payment)
@@ -118,6 +118,10 @@ def build_doc_from_event(event, order_id=None, payment=None, customer_id=None):
     log("fetching information from Square")
 
     order = get_square_order(order_id)
+#
+#    if order['fulfillments'][0]['type'] == "DIGITAL":
+#        raise Exception("order is digital, skipping")
+#
     if not customer_id:
         customer_id = get_customer_id(order)
     customer = {}
@@ -173,6 +177,8 @@ def get_customer_id(order: dict) -> str:
     """
     if order['fulfillments'][0]['type'] == "PICKUP" and order.get('customer_id') is not None:
         return order['customer_id']
+    elif order['fulfillments'][0]['type'] == "DIGITAL" and order.get('customer_id') is not None:
+        return order['customer_id']
 
     return None
 
@@ -195,7 +201,20 @@ def create_faux_customer(order):
     """ Creates faux customer object from information within order
     """
 
-    recipient = order['fulfillments'][0]['pickup_details']['recipient']
+    customer = {
+        'given_name': "unknown",
+        'family_name': "unknown",
+        'phone_number': "",
+        'version': -1,
+    }
+
+    fulfillments = order['fulfillments'][0]
+    if fulfillments['type'] == "DIGITAL":
+        return customer
+
+    pickup_details = fulfillments['pickup_details']
+    recipient = pickup_details['recipient']
+
     name_tokens = recipient['display_name'].split(" ")
 
     phone_number = "unknown"
@@ -217,7 +236,7 @@ def get_payment_id(order) -> str:
 
     Returns None if it can not be found in order
     """
-    return order['tenders'][0]['id'] if len(order['tenders']) == 1 else None
+    return order['tenders'][0]['id'] if len(order.get('tenders',[])) == 1 else None
 
 
 def get_square_payment(payment_id: str):
@@ -226,6 +245,9 @@ def get_square_payment(payment_id: str):
     Raises exception if there was any error (transient or invalid payment ID)
     """
     payments_api = square_client.payments
+
+    if not payment_id:
+        raise Exception("asked for a None payment")
 
     result = payments_api.get_payment(payment_id)
     if result.is_success():

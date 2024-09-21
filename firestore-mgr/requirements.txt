@@ -1,10 +1,10 @@
-google-cloud-firestore==2.7.2
-google-cloud-storage==2.8.0
-pytest-mock==3.10.0
-PyMySQL==1.0.3
-sqlalchemy==2.0.8
-jinja2==3.1.2
-weasyprint==58.0
+google-cloud-firestore==2.18.0
+google-cloud-storage==2.18.2
+pytest-mock==3.14.0
+PyMySQL==1.1.1
+sqlalchemy==2.0.32
+jinja2==3.1.4
+weasyprint==62.3
 git+https://github.com/bobcallaway/shillelagh@lastrow#egg=shillelagh
 # was working at e13ed4f6520d220764aabb6f8a1b19485c326d70
 # branch lastrow

@@ -73,9 +73,11 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
     customer_name = Column(Text)
     last_name = Column(Text)
     phone_number = Column(Text)
-    shrimp_boil_meals = Column(Integer, default=0)
-    mac_and_cheese_meals = Column(Integer, default=0)
-    beers = Column(Text)
+    jambalaya = Column(Integer, default=0)
+    pastalaya = Column(Integer, default=0)
+    kids_meals = Column(Integer, default=0)
+    drinks = Column(Integer, default=0)
+    donations = Column(Float, default=0)
     tip = Column(Float, default=0)
     total = Column(Float, default=0)
     fees = Column(Float, default=0)
@@ -97,7 +99,8 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
         self.__update_last_name(doc)
         self.__update_phone_number(doc)
         self.__update_meals(doc)
-        self.__update_beers(doc)
+        self.__update_drinks(doc)
+        self.__update_donations(doc)
         self.__update_tip(doc)
         self.__update_total(doc)
         self.__update_fees(doc)
@@ -129,42 +132,53 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
         given_name = doc['customer'].get('given_name')
         family_name = doc['customer'].get('family_name')
         if not given_name or not family_name:
-            display_name = \
-                doc['order']['fulfillments'][0]['pickup_details']['recipient'].get('display_name')
-            if display_name:
-                name_tokens = display_name.split(" ")
-                given_name = " ".join(name_tokens[:-1])
-                family_name = name_tokens[-1]
+            if doc['order']['fulfillments'][0].get('pickup_details', None):
+                display_name = \
+                    doc['order']['fulfillments'][0]['pickup_details']['recipient'].get('display_name')
+                if display_name:
+                    name_tokens = display_name.split(" ")
+                    given_name = " ".join(name_tokens[:-1])
+                    family_name = name_tokens[-1]
+            else:
+                given_name = doc['payment']['shipping_address']['first_name']
+                family_name = doc['payment']['shipping_address']['last_name']
         self.customer_name = f"{given_name} {family_name}".title()
         return True
 
     def __update_last_name(self, doc):
         family_name = doc['customer'].get('family_name')
         if not family_name:
-            display_name = \
-                doc['order']['fulfillments'][0]['pickup_details']['recipient'].get('display_name')
-            if display_name:
-                name_tokens = display_name.split(" ")
-                family_name = name_tokens[-1]
+            if doc['order']['fulfillments'][0].get('pickup_details', None):
+                display_name = \
+                    doc['order']['fulfillments'][0]['pickup_details']['recipient'].get('display_name')
+                if display_name:
+                    name_tokens = display_name.split(" ")
+                    family_name = name_tokens[-1]
+            else:
+                family_name = doc['payment']['shipping_address']['last_name']
         self.last_name = family_name.title()
         return False
 
     def __update_phone_number(self, doc):
         phone_number = doc['customer'].get('phone_number')
-        if not phone_number:
+        if not phone_number and doc['order']['fulfillments'][0].get('pickup_details', None):
             phone_number = \
                 doc['order']['fulfillments'][0]['pickup_details']['recipient'].get('phone_number')
         self.phone_number = phone_number.replace("+", "").replace("-", "")
         return True
 
     def __update_meals(self, doc):
-        self.shrimp_boil_meals, self.mac_and_cheese_meals = \
+        self.jambalaya, self.pastalaya, self.kids_meals = \
             extract_meal_counts(doc['order'])
         return True
 
-    def __update_beers(self, doc):
-        self.beers = json.dumps(extract_beers(doc['order']))
+    def __update_drinks(self, doc):
+        self.drinks = extract_drinks(doc['order'])
         return True
+
+    def __update_donations(self, doc):
+        self.donations = extract_donations(doc['order'])
+        return False
 
     def __update_tip(self, doc):
         self.tip = doc['order']['total_tip_money']['amount'] / 100
@@ -183,7 +197,7 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
 
     def __update_note(self, doc):
         note = doc['order'].get('note')
-        if not note:
+        if not note and doc['order']['fulfillments'][0].get('pickup_details', None):
             note = doc['order']['fulfillments'][0]['pickup_details'].get('note')
         self.note = note
         return True
@@ -209,7 +223,8 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
         re.compile(r"^payment.receipt_url$"): ['_Order__update_receipt_url'],
         re.compile(r"^order.line_items.*"): ['_Order__update_pickup_window',
                                              '_Order__update_meals',
-                                             '_Order__update_beers'],
+                                             '_Order__update_donations',
+                                             '_Order__update_drinks'],
         re.compile(r"^order.fulfillments$"): ['_Order__update_customer_name',
                                               '_Order__update_last_name',
                                               '_Order__update_note'],
@@ -245,38 +260,40 @@ def extract_pickup_time(order) -> str:
     """ extracts the earliest pickup time from an order"""
     min_pickup_time = ""
     for line_item in order['line_items']:
-        if (line_item['name'] == "Shrimp Boil Meal") and line_item['variation_name']:
+        if (line_item['name'] == "Jambalaya Meal" or line_item['name'] == "Pasta-laya Meal") and line_item['variation_name']:
             if min_pickup_time == "" or line_item['variation_name'] < min_pickup_time:
                 min_pickup_time = line_item['variation_name']
 
     if min_pickup_time == "":
-        min_pickup_time = "6:00PM-6:15PM Serving"
+        min_pickup_time = "5:00PM-6:00PM Serving"
 
     return min_pickup_time
+#    return "6:00PM-6:15PM Serving"
 
 
 def extract_meal_counts(order):
-    """ This extracts the count of each type of meal (shrimp / mac_and_cheese)"""
-    shrimp = 0
-    mac_and_cheese = 0
+    """ This extracts the count of each type of meal (adult / kids)"""
+    jambalaya = 0
+    pastalaya = 0
+    kids = 0
 
     for line_item in order['line_items']:
-        if line_item['name'] == "Shrimp Boil Meal":
-            shrimp += int(line_item['quantity'])
-        elif line_item['name'] == "Mac & Cheese":
-            mac_and_cheese += int(line_item['quantity'])
+        if line_item['name'] == "Jambalaya Meal":
+            jambalaya += int(line_item['quantity'])
+        elif line_item['name'] == "Pasta-laya Meal":
+            pastalaya += int(line_item['quantity'])
+        elif line_item['name'] == "Hot Dog & Chips":
+            kids += int(line_item['quantity'])
 
-    return shrimp, mac_and_cheese
+    return jambalaya, pastalaya, kids
 
 
-def extract_beers(order):
+def extract_drinks(order):
     """ This extracts a list of KVPs of type of beer and quantity """
-    beers = {}
+    beers = 0
     for line_item in order['line_items']:
         if line_item['name'] == "Drink Ticket (Beer or Wine)":
-            if not beers.get("Ticket"):
-                beers["Ticket"] = 0
-            beers["Ticket"] += int(line_item['quantity'])
+            beers += int(line_item['quantity'])
 #        elif line_item['name'] == "Brüeprint Draft Beer Ticket":
 #            if not beers.get("Draft"):
 #                beers["Draft"] = 0
@@ -284,6 +301,16 @@ def extract_beers(order):
 
     return beers
 
+
+def extract_donations(order):
+    """ This extracts the total amount of donations made"""
+    donations = 0.0
+
+    for line_item in order['line_items']:
+        if line_item['name'] == "Donate to support individuals with intellectual disabilities":
+            donations += line_item['total_money']['amount'] / 100
+
+    return donations
 
 db_user = os.environ["DB_USER"]
 db_pass = os.environ["DB_PASS"]
@@ -416,7 +443,7 @@ def create_label(order):
     template_file = "label_template.html"
     template = template_env.get_template(template_file)
 
-    output_text = template.render(order=order, beers=json.loads(order.beers))
+    output_text = template.render(order=order, beers={})
 
     html_renderer = HTML(string=output_text)
 
