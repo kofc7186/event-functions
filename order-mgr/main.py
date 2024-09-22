@@ -14,6 +14,7 @@ import os
 import re
 
 from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter, Or
 
 from square.client import Client
 
@@ -55,9 +56,11 @@ def handle_order_created(event, context):
     log("Received pubsub message_id '%s' from 'square.order.created' topic", context.event_id)
     webhook_event = json.loads(base64.b64decode(event['data']).decode('utf-8'))
 
+    order = webhook_event['data']['object']['order_created']
+    order_id = order['order_id']
     doc = build_doc_from_event(webhook_event)
 
-    commit_to_firestore(doc)
+    commit_to_firestore(doc, order_id=order_id)
 
 
 def handle_order_updated(event, context):
@@ -91,18 +94,18 @@ def handle_customer_updated(event, context):
     # search firestore to see if we have any orders referencing this customer ID
     # there may be two cases; one where we knew the customer_id when it was inserted
     event_ref = firestore_client.collection('events').document(os.environ['EVENT_DATE'])
-    customer_id_ref = event_ref.collection('orders').where("customer.id", "==", customer_id)
-    order_cust_ref = event_ref.collection('orders').where("order.customer_id", "==", customer_id)
-    results = customer_id_ref.get()
-    results.append(order_cust_ref.get())
-    if len(results) == 0:
-        log("received update for customer ID %s but no documents matched", customer_id)
-        return
+    customer_id_ref = event_ref.collection('orders').where(filter=Or([FieldFilter("customer.id", "==", customer_id),FieldFilter("order.customer_id", "==", customer_id)]))
+    results = customer_id_ref.stream()
 
     # if yes, rebuild for each of those docs
+    count = 0
     for result in results:
-        doc = build_doc_from_event(None, order_id=result.get('order.id'), customer_id=customer_id)
+        count += 1
+        doc = build_doc_from_event(None, order_id=result.order.id, customer_id=customer_id)
         update_in_firestore(doc)
+
+    if count == 0:
+        log("received update for customer ID %s but no documents matched", customer_id)
 
 
 def build_doc_from_event(event, order_id=None, payment=None, customer_id=None):
@@ -175,6 +178,10 @@ def get_customer_id(order: dict) -> str:
 
     Returns None if it can not be found in order
     """
+    # if this is an in-person order, we won't have a customer_id
+    if order.get('fulfillments') is None:
+        return None
+
     if order['fulfillments'][0]['type'] == "PICKUP" and order.get('customer_id') is not None:
         return order['customer_id']
     elif order['fulfillments'][0]['type'] == "DIGITAL" and order.get('customer_id') is not None:
@@ -207,6 +214,10 @@ def create_faux_customer(order):
         'phone_number': "",
         'version': -1,
     }
+
+    # this will be true for in-person orders with no customer information
+    if order.get('fulfillments') is None:
+        return customer
 
     fulfillments = order['fulfillments'][0]
     if fulfillments['type'] == "DIGITAL":

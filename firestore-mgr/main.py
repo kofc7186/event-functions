@@ -11,6 +11,7 @@
 
 import copy
 import contextvars
+from datetime import datetime
 import enum
 import json
 import os
@@ -19,7 +20,7 @@ import re
 import jinja2
 
 from sqlalchemy import create_engine
-from sqlalchemy import Column, Integer, String, Float, Enum, Text
+from sqlalchemy import Column, DateTime, Integer, String, Float, Enum, Text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
@@ -66,6 +67,7 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
     __tablename__ = 'orders'  # TODO: add event date into table name to provide separation
 
     id = Column(String(256), primary_key=True)
+    created_at = Column(DateTime)
     label_number = Column(Integer)
     square_order_number = Column(Integer)
     receipt_url = Column(Text)
@@ -91,6 +93,7 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
 
     def __init__(self, doc: dict):
         self.__update_id(doc)
+        self.__update_created_at(doc)
         self.__update_label_number(doc)
         self.__update_square_order_number(doc)
         self.__update_receipt_url(doc)
@@ -112,12 +115,16 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
         self.id = doc['order']['id']  # pylint: disable=invalid-name
         return False
 
+    def __update_created_at(self, doc):
+        self.created_at = datetime.fromisoformat(doc['order']['created_at'])
+        return False
+
     def __update_label_number(self, doc):
         self.label_number = doc['order_number']
         return False
 
     def __update_square_order_number(self, doc):
-        self.square_order_number = doc['payment']['reference_id']
+        self.square_order_number = doc['payment'].get('reference_id', doc['order_number'])
         return True
 
     def __update_receipt_url(self, doc):
@@ -161,7 +168,7 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
 
     def __update_phone_number(self, doc):
         phone_number = doc['customer'].get('phone_number')
-        if not phone_number and doc['order']['fulfillments'][0].get('pickup_details', None):
+        if not phone_number and doc['order'].get('fulfillments') is not None and doc['order']['fulfillments'][0].get('pickup_details', None):
             phone_number = \
                 doc['order']['fulfillments'][0]['pickup_details']['recipient'].get('phone_number')
         self.phone_number = phone_number.replace("+", "").replace("-", "")
@@ -197,7 +204,7 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
 
     def __update_note(self, doc):
         note = doc['order'].get('note')
-        if not note and doc['order']['fulfillments'][0].get('pickup_details', None):
+        if not note and doc['order'].get('fulfillments') is not None and doc['order']['fulfillments'][0].get('pickup_details', None):
             note = doc['order']['fulfillments'][0]['pickup_details'].get('note')
         self.note = note
         return True
@@ -218,6 +225,7 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
 
     update_map = {
         re.compile(r"^order.id$"): ['_Order__update_id'],
+        re.compile(r"^order.created_at$"): ['_Order__update_created_at'],
         re.compile(r"^order_number$"): ['_Order__update_label_number'],
         re.compile(r"^payment.reference_id$"): ['_Order__update_square_order_number'],
         re.compile(r"^payment.receipt_url$"): ['_Order__update_receipt_url'],
