@@ -21,43 +21,18 @@
         {% endif %}
         <thead>
             <tr>
-              <th class="mealHeaderL">Jambalaya Meals</th>
-              <th class="mealHeaderMR">Pastalaya Meals</th>
-              <th class="mealHeaderMR">Kids Meals</th>
+              <th class="mealHeaderL">Concert Tickets</th>
+              <th class="mealHeaderMR">Dinner Tickets</th>
             </tr>
           </thead>
         <tbody>
             <tr>
-              <td class="mealValueL">{% if order.jambalaya > 0 %}{{order.jambalaya}}{% endif %}</td>
-              <td class="mealValueMR">{% if order.pastalaya > 0 %}{{order.pastalaya}}{% endif %}</td>
-              <td class="mealValueMR">{% if order.kids_meals > 0 %}{{order.kids_meals}}{% endif %}</td>
+              <td class="mealValueL">{% if order.concert > 0 %}{{order.concert}}{% endif %}</td>
+              <td class="mealValueMR">{% if order.dinner > 0 %}{{order.dinner}}{% endif %}</td>
             </tr>
         </tbody>
       </table>
       <hr/>
-      {% if order.drinks > 0 %}
-      <div class="title"><b><u>Drink Tickets:</u></b> {{order.drinks}}</div>
-      {% endif %}
-      {% if beers|length > 0 %}
-      <div class="title"><b><u>Beer Order:</u></b></div>
-      <br/>
-      <table class="table align-middle" style="width: auto;">
-        <thead class="table-light">
-            <tr>
-              <th style="font-size: 24px;">Quantity</th>
-              <th style="font-size: 24px;">Type</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for beer, quantity in beers.items() %}
-            <tr>
-              <td style="font-size: 24px; text-align:center;">{{quantity}}</td>
-              <td style="font-size: 24px;">{{beer}}</td>
-            </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      {% endif %}
     </div>
   </body>
 </html>

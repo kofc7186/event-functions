@@ -180,7 +180,7 @@ def get_customer_id(order: dict) -> str:
     """
     # if this is an in-person order, we won't have a customer_id
     if order.get('fulfillments') is None:
-        return None
+        return order.get('customer_id')
 
     if order['fulfillments'][0]['type'] == "PICKUP" and order.get('customer_id') is not None:
         return order['customer_id']

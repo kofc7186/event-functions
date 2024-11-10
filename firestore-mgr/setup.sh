@@ -12,7 +12,7 @@ gcloud functions deploy firestore-mgr-created \
   --runtime python311 \
   --memory=256MB \
   --trigger-event "providers/cloud.firestore/eventTypes/document.create" \
-  --trigger-resource "projects/serverless-fish-fry/databases/(default)/documents/events/2024-09-21/orders/{order}"
+  --trigger-resource "projects/serverless-fish-fry/databases/(default)/documents/events/2024-12-06/orders/{order}"
 
 gcloud functions deploy firestore-mgr-updated \
   --project serverless-fish-fry \
@@ -22,4 +22,4 @@ gcloud functions deploy firestore-mgr-updated \
   --runtime python311 \
   --memory=256MB \
   --trigger-event "providers/cloud.firestore/eventTypes/document.update" \
-  --trigger-resource "projects/serverless-fish-fry/databases/(default)/documents/events/2024-09-21/orders/{order}"
+  --trigger-resource "projects/serverless-fish-fry/databases/(default)/documents/events/2024-12-06/orders/{order}"
