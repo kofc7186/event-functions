@@ -58,9 +58,12 @@ def handle_order_created(event, context):
 
     order = webhook_event['data']['object']['order_created']
     order_id = order['order_id']
-    doc = build_doc_from_event(webhook_event)
+    doc = build_doc_from_event(webhook_event, order_id=order_id)
+    if doc['order']['state'] == "DRAFT":
+        log("received create webhook for a DRAFT order, squelching")
+        return
 
-    commit_to_firestore(doc, order_id=order_id)
+    commit_to_firestore(doc)
 
 
 def handle_order_updated(event, context):
@@ -68,6 +71,9 @@ def handle_order_updated(event, context):
     log("Received pubsub message_id '%s' from 'square.order.updated' topic", context.event_id)
     webhook_event = json.loads(base64.b64decode(event['data']).decode('utf-8'))
     doc = build_doc_from_event(webhook_event)
+    if doc['order']['state'] == "DRAFT":
+        log("received update webhook for a DRAFT order, squelching")
+        return
 
     update_in_firestore(doc)
 
@@ -144,7 +150,8 @@ def build_doc_from_event(event, order_id=None, payment=None, customer_id=None):
 
     if not payment:
         payment_id = get_payment_id(order)
-        payment = get_square_payment(payment_id)
+        if payment_id is not None:
+            payment = get_square_payment(payment_id)
 
     return {
         'order': order,
@@ -298,7 +305,7 @@ def update_in_firestore(doc: dict):
         curr_order = order_doc.to_dict()
         if curr_order['order']['version'] > doc['order']['version']:
             update_doc['order'] = doc['order']
-        if curr_order['payment']['updated_at'] > doc['payment']['updated_at']:
+        if doc.get('payment') is not None and curr_order['payment']['updated_at'] > doc['payment']['updated_at']:
             update_doc['payment'] = doc['payment']
         curr_customer_version = curr_order['customer'].get('version')
         if not curr_customer_version or curr_customer_version > doc['customer']['version']:

@@ -126,11 +126,15 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
         return False
 
     def __update_square_order_number(self, doc):
-        self.square_order_number = doc['payment'].get('reference_id', doc['order_number'])
+        if doc.get('payment') is not None:
+            self.square_order_number = doc['payment'].get('reference_id', doc['order_number'])
+        else:
+            self.square_order_number = doc['order_number']
         return True
 
     def __update_receipt_url(self, doc):
-        self.receipt_url = doc['payment']['receipt_url']
+        if doc.get('payment') is not None:
+            self.receipt_url = doc['payment']['receipt_url']
         return False
 
     def __update_pickup_window(self, doc):
@@ -148,7 +152,7 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
                     name_tokens = display_name.split(" ")
                     given_name = " ".join(name_tokens[:-1])
                     family_name = name_tokens[-1]
-            else:
+            elif doc.get('payment') is not None:
                 given_name = doc['payment']['shipping_address']['first_name']
                 family_name = doc['payment']['shipping_address']['last_name']
         self.customer_name = f"{given_name} {family_name}".title()
@@ -163,7 +167,7 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
                 if display_name:
                     name_tokens = display_name.split(" ")
                     family_name = name_tokens[-1]
-            else:
+            elif doc.get('payment') is not None:
                 family_name = doc['payment']['shipping_address']['last_name']
         self.last_name = family_name.title()
         return False
@@ -173,7 +177,7 @@ class Order(Base):  # pylint: disable=too-many-instance-attributes
         if not phone_number and doc['order'].get('fulfillments') is not None and doc['order']['fulfillments'][0].get('pickup_details', None):
             phone_number = \
                 doc['order']['fulfillments'][0]['pickup_details']['recipient'].get('phone_number')
-        self.phone_number = phone_number.replace("+", "").replace("-", "")
+        self.phone_number = phone_number.replace("+", "").replace("-", "") if phone_number is not None else ""
         return True
 
     def __update_meals(self, doc):
